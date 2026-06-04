@@ -1,0 +1,43 @@
+name: Java CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify build
+        run: mvn -B -q clean compile
+
+      - name: Run tests (if any)
+        run: mvn -B -q test
+        continue-on-error: true
+        # Sem testes ainda — não bloqueia PR. Quando JUnit for adicionado,
+        # troque continue-on-error por obrigatório.
+
+      - name: Package
+        run: mvn -B -q -DskipTests package
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-jar
+          path: target/minecraft-launcher-*.jar
+          if-no-files-found: warn
+          retention-days: 7

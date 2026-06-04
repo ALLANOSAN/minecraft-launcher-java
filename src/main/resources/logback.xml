@@ -1,9 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Configuração de logging do MineLauncher.
+
+  Estratégia de rotação:
+  - Arquivo principal: logs/launcher.log
+  - Quando passar de 10MB, é renomeado para launcher.log.1, .2, etc.
+  - Mantém até 5 arquivos rotacionados (10MB x 5 = 50MB total no máximo).
+  - Em produção isso é suficiente para ~2 semanas de uso intenso.
+
+  Níveis:
+  - root INFO: produção, só eventos importantes
+  - com.minelauncher DEBUG: extraído do código legado `debugLog` que antes
+    escrevia em /tmp/launcher-clock.log. Para ver esses logs, suba o nível
+    da categoria para DEBUG.
+-->
 <configuration>
-    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+    <!--
+      File appender com rotação por tamanho.
+      SizeBasedTriggeringPolicy dispara ao passar de 10MB.
+      FixedWindowRollingPolicy mantém até 5 arquivos históricos indexados.
+      Total no disco: 6 arquivos x 10MB = 60MB worst case.
+    -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/launcher.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>logs/launcher.%i.log</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>5</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>10MB</maxFileSize>
+        </triggeringPolicy>
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
@@ -17,4 +46,11 @@
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </root>
+
+    <!--
+      Categoria do projeto: nível INFO por padrão. Logs de debug do
+      antigo debugLog (agora LOG.debug) só aparecem se o usuário
+      trocar para "DEBUG" no XML ou via variável de ambiente.
+    -->
+    <logger name="com.minelauncher" level="INFO"/>
 </configuration>

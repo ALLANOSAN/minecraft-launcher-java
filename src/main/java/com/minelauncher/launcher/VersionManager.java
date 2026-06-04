@@ -248,9 +248,16 @@ public class VersionManager {
         pb.directory(baseDir);
         pb.inheritIO();
         Process p = pb.start();
+        // FIX H-12: timeout de 5min evita travar launcher se o instalador
+        // entrar em loop infinito. Antes p.waitFor() bloqueava indefinidamente.
         try {
-            p.waitFor();
+            if (!p.waitFor(5, java.util.concurrent.TimeUnit.MINUTES)) {
+                p.destroyForcibly();
+                throw new IOException("Instalador Forge excedeu 5 minutos — abortado.");
+            }
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            p.destroyForcibly();
             throw new IOException("Instalação do Forge interrompida");
         }
 
@@ -353,9 +360,16 @@ public class VersionManager {
             while ((line = reader.readLine()) != null) LOG.info("NeoForge: {}", line);
         }
         try {
-            int exitCode = p.waitFor();
+            // FIX H-12: timeout 5min para o instalador NeoForge.
+            if (!p.waitFor(5, java.util.concurrent.TimeUnit.MINUTES)) {
+                p.destroyForcibly();
+                throw new IOException("Instalador NeoForge excedeu 5 minutos — abortado.");
+            }
+            int exitCode = p.exitValue();
             if (exitCode != 0) throw new IOException("NeoForge installer falhou (exit " + exitCode + ")");
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            p.destroyForcibly();
             throw new IOException("Instalação do NeoForge interrompida");
         }
 
