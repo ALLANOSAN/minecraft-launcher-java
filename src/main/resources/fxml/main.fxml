@@ -1,0 +1,598 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.shape.*?>
+<?import javafx.scene.text.*?>
+
+<StackPane xmlns:fx="http://javafx.com/fxml" fx:controller="com.minelauncher.ui.controllers.MainController"
+            styleClass="root-pane-transparent" prefWidth="1210" prefHeight="750">
+    
+    <BorderPane styleClass="main-container" prefWidth="1180" prefHeight="720">
+        <padding><Insets top="0" bottom="0" left="0" right="0"/></padding>
+
+    <!-- ============================= HEADER ============================= -->
+    <top>
+        <HBox fx:id="headerBar" styleClass="header-bar" alignment="CENTER_LEFT"
+              spacing="14" prefWidth="1180">
+
+            <!-- Brand mark + wordmark -->
+            <HBox alignment="CENTER_LEFT" spacing="11">
+                <StackPane styleClass="brand-mark" prefWidth="28" prefHeight="28">
+                    <Label text="M" styleClass="brand-mark-label"/>
+                </StackPane>
+                <VBox spacing="-2" alignment="CENTER_LEFT">
+                    <Label fx:id="titleLabel" text="MINELAUNCHER" styleClass="header-title"/>
+                    <Label text="v1.0.0 · CORE TERMINAL" styleClass="header-tag"/>
+                </VBox>
+            </HBox>
+
+            <Region HBox.hgrow="ALWAYS"/>
+
+            <!-- Session info chip -->
+            <HBox styleClass="session-chip" alignment="CENTER_LEFT" spacing="0">
+                <VBox spacing="1" alignment="CENTER_LEFT">
+                    <Label text="STATUS" styleClass="session-chip-label"/>
+                    <Label fx:id="sessionStatusLabel" text="● READY" styleClass="session-chip-accent"/>
+                </VBox>
+                <Region styleClass="session-chip-divider"/>
+                <VBox spacing="1" alignment="CENTER_LEFT">
+                    <Label text="SESSION" styleClass="session-chip-label"/>
+                    <Label fx:id="sessionTimeLabel" text="00:00:00" styleClass="session-chip-value"/>
+                </VBox>
+            </HBox>
+
+            <Region prefWidth="6"/>
+
+            <Button fx:id="minimizeBtn" styleClass="window-btn" onAction="#minimizeWindow" focusTraversable="false">
+                <graphic><SVGPath content="M5 12h14" fill="TRANSPARENT" stroke="#5a6273" strokeWidth="1.6"/></graphic>
+                <tooltip><Tooltip text="Minimizar"/></tooltip>
+            </Button>
+            <Button fx:id="maximizeBtn" styleClass="window-btn" onAction="#maximizeWindow" focusTraversable="false">
+                <graphic><SVGPath content="M4 4h16v16H4z" fill="TRANSPARENT" stroke="#5a6273" strokeWidth="1.5"/></graphic>
+                <tooltip><Tooltip text="Maximizar"/></tooltip>
+            </Button>
+            <Button fx:id="closeBtn" styleClass="window-btn window-close" onAction="#closeWindow" focusTraversable="false">
+                <graphic><SVGPath content="M6 6l12 12 M18 6L6 18" fill="TRANSPARENT" stroke="#5a6273" strokeWidth="1.6"/></graphic>
+                <tooltip><Tooltip text="Fechar"/></tooltip>
+            </Button>
+        </HBox>
+    </top>
+
+    <!-- ============================= SIDEBAR ============================= -->
+    <left>
+        <VBox fx:id="sidebar" styleClass="sidebar" prefWidth="248" minWidth="248"
+              maxWidth="248" minHeight="0">
+
+            <!-- TOPO: user + conta + perfil (altura fixa) -->
+            <VBox VBox.vgrow="NEVER" spacing="0">
+                <VBox styleClass="user-card" spacing="10" alignment="CENTER_LEFT">
+                    <padding><Insets top="16" bottom="16" left="18" right="18"/></padding>
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <StackPane styleClass="avatar-circle" prefWidth="46" prefHeight="46">
+                            <Label fx:id="avatarInitial" text="P" styleClass="avatar-initial"/>
+                        </StackPane>
+                        <VBox spacing="3" HBox.hgrow="ALWAYS">
+                            <Label fx:id="userNameLabel" text="Convidado" styleClass="user-name"/>
+                            <HBox alignment="CENTER_LEFT" spacing="6">
+                                <Region styleClass="status-dot status-dot-online"/>
+                                <Label text="OFFLINE · GUEST" styleClass="user-status"/>
+                            </HBox>
+                        </VBox>
+                    </HBox>
+                </VBox>
+
+                <Region styleClass="sidebar-divider"/>
+
+                <VBox styleClass="sidebar-section" spacing="6">
+                    <padding><Insets top="10" bottom="4" left="18" right="18"/></padding>
+                    <Label text="CONTA" styleClass="section-label"/>
+                    <ComboBox fx:id="accountCombo" styleClass="profile-combo" maxWidth="Infinity"
+                              promptText="Selecionar conta..."/>
+                    <HBox spacing="6">
+                        <Button styleClass="btn-ghost btn-ghost-accent" onAction="#loginOffline" maxWidth="Infinity"
+                                HBox.hgrow="ALWAYS" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M19 8v6 M22 11h-6"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.6"/>
+                            </graphic>
+                            <text>Offline</text>
+                        </Button>
+                        <Button styleClass="btn-ghost btn-ghost-microsoft" onAction="#loginMicrosoft" maxWidth="Infinity"
+                                HBox.hgrow="ALWAYS" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M3 5.6L10.5 4.5v7H3V5.6z M3 12.5h7.5v7L3 18.4v-5.9z M11 4.4L21 3v8.5h-10V4.4z M11 12.5h10V21l-10-1.4v-7.1z"
+                                         fill="#9ba3b8"/>
+                            </graphic>
+                            <text>Microsoft</text>
+                        </Button>
+                    </HBox>
+                    <Button text="Remover conta" styleClass="btn-link-danger" onAction="#removeAccount" maxWidth="Infinity"
+                            focusTraversable="false">
+                        <graphic>
+                            <SVGPath content="M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                                     fill="TRANSPARENT" stroke="#ef6b6b" strokeWidth="1.5"/>
+                        </graphic>
+                    </Button>
+                </VBox>
+
+                <Region styleClass="sidebar-divider"/>
+
+                <VBox styleClass="sidebar-section" spacing="6">
+                    <padding><Insets top="4" bottom="4" left="18" right="18"/></padding>
+                    <Label text="PERFIL" styleClass="section-label"/>
+                    <ComboBox fx:id="profileCombo" styleClass="profile-combo" maxWidth="Infinity"/>
+                    <HBox spacing="6">
+                        <Button styleClass="btn-ghost" onAction="#openProfileSettings" maxWidth="Infinity"
+                                HBox.hgrow="ALWAYS" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.5"/>
+                            </graphic>
+                            <text>Editar</text>
+                        </Button>
+                        <Button styleClass="btn-ghost" onAction="#duplicateProfile" maxWidth="Infinity"
+                                HBox.hgrow="ALWAYS" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2z M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.5"/>
+                            </graphic>
+                            <text>Duplicar</text>
+                        </Button>
+                    </HBox>
+                </VBox>
+
+                <Region styleClass="sidebar-divider"/>
+            </VBox>
+
+            <!-- CENTRO: navegação (preenche o espaço entre top e bottom) -->
+            <VBox VBox.vgrow="ALWAYS" minHeight="0" styleClass="nav-center">
+                <padding><Insets top="6" bottom="0" left="12" right="12"/></padding>
+                <Label text="NAVEGAÇÃO" styleClass="section-label" style="-fx-padding: 0 0 4 6;"/>
+                <ScrollPane styleClass="nav-scroll" fitToWidth="true"
+                            VBox.vgrow="ALWAYS" minHeight="0"
+                            hbarPolicy="NEVER" vbarPolicy="AS_NEEDED">
+                    <VBox spacing="3">
+                        <padding><Insets top="0" bottom="8" left="0" right="0"/></padding>
+                        <Button fx:id="homeBtn" styleClass="nav-btn" onAction="#showHome"
+                                maxWidth="Infinity" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.6"/>
+                            </graphic>
+                            <text>Início</text>
+                        </Button>
+                        <Button fx:id="versionsBtn" styleClass="nav-btn" onAction="#showVersions"
+                                maxWidth="Infinity" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z M3.27 6.96L12 12.01l8.73-5.05 M12 22.08V12"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.6"/>
+                            </graphic>
+                            <text>Versões</text>
+                        </Button>
+                        <Button fx:id="modsBtn" styleClass="nav-btn" onAction="#showMods"
+                                maxWidth="Infinity" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.6"/>
+                            </graphic>
+                            <text>Mods</text>
+                        </Button>
+                        <Button fx:id="resourcePacksBtn" styleClass="nav-btn" onAction="#showResourcePacks"
+                                maxWidth="Infinity" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M12 22a10 10 0 1 1 7.07-2.93 1 1 0 0 1-.32.93l-1.55 1.55a1 1 0 0 1-1.7-.7V20a2 2 0 0 0-2-2h-2.5a1.5 1.5 0 0 1 0-3 1 1 0 0 0 1-1z M6.5 12.5l-1 1 M9.5 9.5l-1 1 M12.5 6.5l-1 1 M15.5 3.5l-1 1"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.5"/>
+                            </graphic>
+                            <text>Resource Packs</text>
+                        </Button>
+                        <Button fx:id="savesBtn" styleClass="nav-btn" onAction="#showSaves"
+                                maxWidth="Infinity" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.6"/>
+                            </graphic>
+                            <text>Saves</text>
+                        </Button>
+                        <Button fx:id="screenshotsBtn" styleClass="nav-btn" onAction="#showScreenshots"
+                                maxWidth="Infinity" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.6"/>
+                            </graphic>
+                            <text>Screenshots</text>
+                        </Button>
+                        <Button fx:id="settingsBtn" styleClass="nav-btn" onAction="#showSettings"
+                                maxWidth="Infinity" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.4"/>
+                            </graphic>
+                            <text>Configurações</text>
+                        </Button>
+
+                        <Region styleClass="sidebar-divider"/>
+                        <VBox styleClass="play-section" alignment="CENTER"
+                              prefHeight="108" minHeight="108" maxHeight="108">
+                            <padding><Insets top="14" bottom="20" left="18" right="18"/></padding>
+                            <HBox alignment="CENTER_LEFT" spacing="6" maxWidth="Infinity">
+                                <padding><Insets left="4" right="4" bottom="6"/></padding>
+                                <Label text="ENGINE" styleClass="mono-label"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label text="READY" styleClass="mono-label mono-label-accent"/>
+                            </HBox>
+                            <Button fx:id="playButton" styleClass="play-button" onAction="#launchGame"
+                                    maxWidth="Infinity" prefHeight="60"
+                                    focusTraversable="false">
+                                <graphic>
+                                    <SVGPath content="M6 4l14 8-14 8V4z" fill="#0a0d14"/>
+                                </graphic>
+                                <text>JOGAR</text>
+                            </Button>
+                        </VBox>
+                        <Region prefHeight="50" minHeight="50"/>
+                    </VBox>
+                </ScrollPane>
+            </VBox>
+        </VBox>
+    </left>
+
+    <!-- ============================= CONTENT ============================= -->
+    <center>
+        <VBox styleClass="content-wrapper">
+
+            <StackPane fx:id="contentPane" VBox.vgrow="ALWAYS" styleClass="content-pane">
+
+                <!-- HOME -->
+                <VBox fx:id="homePane" spacing="24" visible="true">
+                    <padding><Insets top="32" bottom="32" left="36" right="36"/></padding>
+
+                    <VBox spacing="4">
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <Region styleClass="accent-dot"/>
+                            <Label text="SESSÃO ATIVA" styleClass="welcome-eyebrow"/>
+                            <Label text="·" styleClass="welcome-eyebrow"/>
+                            <Label fx:id="welcomeProfileLabel" text="—" styleClass="welcome-eyebrow"/>
+                            <Label text="·" styleClass="welcome-eyebrow"/>
+                            <Label fx:id="welcomeVersionLabel" text="—" styleClass="welcome-eyebrow"/>
+                        </HBox>
+                        <Label fx:id="welcomeLabel" text="Bem-vindo de volta." styleClass="welcome-title"/>
+                        <HBox alignment="CENTER_LEFT" spacing="16" style="-fx-padding: 6 0 0 0;">
+                            <HBox alignment="CENTER_LEFT" spacing="8">
+                                <Label text="LAST PLAY" styleClass="mono-label"/>
+                                <Text fx:id="lastPlayedText" text="Nenhuma" styleClass="info-text"/>
+                            </HBox>
+                            <Region styleClass="status-divider"/>
+                            <HBox alignment="CENTER_LEFT" spacing="8">
+                                <Label text="LATEST" styleClass="mono-label"/>
+                                <Text fx:id="versionStatusText" text="Carregando..." styleClass="info-text"/>
+                            </HBox>
+                        </HBox>
+                    </VBox>
+
+                    <HBox spacing="14" alignment="CENTER_LEFT">
+                        <VBox styleClass="stat-card" spacing="10" HBox.hgrow="ALWAYS">
+                            <padding><Insets top="18" bottom="18" left="20" right="20"/></padding>
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <StackPane styleClass="stat-icon-wrap stat-icon-green">
+                                    <SVGPath content="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z M3.27 6.96L12 12.01l8.73-5.05 M12 22.08V12"
+                                             fill="TRANSPARENT" stroke="#9EFF8E" strokeWidth="1.6"/>
+                                </StackPane>
+                                <Label text="VERSÕES" styleClass="stat-label"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label text="+2" styleClass="stat-trend"/>
+                            </HBox>
+                            <HBox alignment="BASELINE_LEFT" spacing="6">
+                                <Label text="0" styleClass="stat-value"/>
+                                <Label text="INSTALLED" styleClass="stat-suffix"/>
+                            </HBox>
+                        </VBox>
+                        <VBox styleClass="stat-card" spacing="10" HBox.hgrow="ALWAYS">
+                            <padding><Insets top="18" bottom="18" left="20" right="20"/></padding>
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <StackPane styleClass="stat-icon-wrap stat-icon-violet">
+                                    <SVGPath content="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
+                                             fill="TRANSPARENT" stroke="#A78BFA" strokeWidth="1.6"/>
+                                </StackPane>
+                                <Label text="MODS" styleClass="stat-label"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label text="STABLE" styleClass="stat-trend"/>
+                            </HBox>
+                            <HBox alignment="BASELINE_LEFT" spacing="6">
+                                <Label text="0" styleClass="stat-value"/>
+                                <Label text="LOADED" styleClass="stat-suffix"/>
+                            </HBox>
+                        </VBox>
+                        <VBox styleClass="stat-card" spacing="10" HBox.hgrow="ALWAYS">
+                            <padding><Insets top="18" bottom="18" left="20" right="20"/></padding>
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <StackPane styleClass="stat-icon-wrap stat-icon-amber">
+                                    <SVGPath content="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"
+                                             fill="TRANSPARENT" stroke="#FFB454" strokeWidth="1.6"/>
+                                </StackPane>
+                                <Label text="PROFILES" styleClass="stat-label"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label text="1" styleClass="stat-trend stat-trend-down"/>
+                            </HBox>
+                            <HBox alignment="BASELINE_LEFT" spacing="6">
+                                <Label text="0" styleClass="stat-value"/>
+                                <Label text="SAVED" styleClass="stat-suffix"/>
+                            </HBox>
+                        </VBox>
+                        <VBox styleClass="stat-card" spacing="10" HBox.hgrow="ALWAYS">
+                            <padding><Insets top="18" bottom="18" left="20" right="20"/></padding>
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <StackPane styleClass="stat-icon-wrap stat-icon-cyan">
+                                    <SVGPath content="M3 3h18v18H3z M3 9h18 M9 21V9"
+                                             fill="TRANSPARENT" stroke="#7DD3FC" strokeWidth="1.6"/>
+                                </StackPane>
+                                <Label text="MEMORY" styleClass="stat-label"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label text="OK" styleClass="stat-trend"/>
+                            </HBox>
+                            <HBox alignment="BASELINE_LEFT" spacing="6">
+                                <Label text="2" styleClass="stat-value"/>
+                                <Label text="/" styleClass="stat-suffix"/>
+                                <Label text="4" styleClass="stat-value"/>
+                                <Label text="GB ALLOC" styleClass="stat-suffix"/>
+                            </HBox>
+                        </VBox>
+                    </HBox>
+
+                    <VBox styleClass="quick-play-card" spacing="0">
+                        <padding><Insets top="0" bottom="0" left="0" right="0"/></padding>
+                        <HBox alignment="CENTER_LEFT" spacing="18">
+                            <padding><Insets top="22" bottom="22" left="24" right="24"/></padding>
+                            <StackPane styleClass="quick-play-icon">
+                                <SVGPath content="M6 4l14 8-14 8V4z" fill="#9EFF8E"/>
+                            </StackPane>
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="Pronto para iniciar" styleClass="quick-play-title"/>
+                                <Label text="Selecione um perfil e clique em JOGAR para começar a sessão" styleClass="quick-play-subtitle"/>
+                                <Label text="▸ ENTER PARA JOGAR" styleClass="quick-play-meta" style="-fx-padding: 4 0 0 0;"/>
+                            </VBox>
+                            <Button styleClass="btn-ghost btn-ghost-accent" onAction="#showHome" focusTraversable="false">
+                                <graphic>
+                                    <SVGPath content="M5 12h14 M13 5l7 7-7 7"
+                                             fill="TRANSPARENT" stroke="#9EFF8E" strokeWidth="1.7"/>
+                                </graphic>
+                                <text>Detalhes</text>
+                            </Button>
+                        </HBox>
+                    </VBox>
+                </VBox>
+
+                <!-- VERSIONS -->
+                <VBox fx:id="versionsPane" spacing="18" visible="false">
+                    <padding><Insets top="28" bottom="28" left="32" right="32"/></padding>
+                    <Label text="Gerenciar Versões" styleClass="page-title"/>
+                    <Text text="Instale versões do Minecraft para usar com seus perfis." styleClass="info-text"/>
+                    <HBox spacing="12" alignment="CENTER_LEFT">
+                        <HBox styleClass="search-wrap" HBox.hgrow="ALWAYS" alignment="CENTER_LEFT" spacing="10">
+                            <padding><Insets left="14" right="14"/></padding>
+                            <SVGPath content="M21 21l-4.35-4.35 M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z"
+                                     fill="TRANSPARENT" stroke="#6b7385" strokeWidth="1.6"/>
+                            <TextField fx:id="versionSearch" promptText="Buscar versão..." styleClass="search-field"
+                                       HBox.hgrow="ALWAYS"/>
+                        </HBox>
+                        <Button fx:id="installVersionBtn" styleClass="btn-primary" onAction="#installVersion" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"
+                                         fill="TRANSPARENT" stroke="#0a0e1a" strokeWidth="1.8"/>
+                            </graphic>
+                            <text>Instalar</text>
+                        </Button>
+                    </HBox>
+                    <ListView fx:id="versionList" styleClass="content-list" VBox.vgrow="ALWAYS"/>
+                </VBox>
+
+                <!-- MODS -->
+                <VBox fx:id="modsPane" spacing="18" visible="false">
+                    <padding><Insets top="28" bottom="28" left="32" right="32"/></padding>
+                    <Label text="Gerenciar Mods / Modpacks" styleClass="page-title"/>
+                    <Text text="Busque e instale mods do Modrinth e CurseForge." styleClass="info-text"/>
+
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <HBox styleClass="search-wrap" HBox.hgrow="ALWAYS" alignment="CENTER_LEFT" spacing="10">
+                            <padding><Insets left="14" right="14"/></padding>
+                            <SVGPath content="M21 21l-4.35-4.35 M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z"
+                                     fill="TRANSPARENT" stroke="#6b7385" strokeWidth="1.6"/>
+                            <TextField fx:id="modSearch" promptText="Buscar mods ou modpacks..."
+                                       styleClass="search-field" HBox.hgrow="ALWAYS"/>
+                        </HBox>
+                        <ComboBox fx:id="sourceCombo" styleClass="filter-combo" prefWidth="140"/>
+                        <ComboBox fx:id="typeCombo" styleClass="filter-combo" prefWidth="130"/>
+                        <Button styleClass="btn-primary" onAction="#searchMods" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M21 21l-4.35-4.35 M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z"
+                                         fill="TRANSPARENT" stroke="#0a0e1a" strokeWidth="1.8"/>
+                            </graphic>
+                            <text>Buscar</text>
+                        </Button>
+                    </HBox>
+
+                    <HBox spacing="8" alignment="CENTER_LEFT" styleClass="action-row">
+                        <Button styleClass="btn-primary" onAction="#installSelected" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M12 5v14 M5 12h14"
+                                         fill="TRANSPARENT" stroke="#0a0e1a" strokeWidth="2"/>
+                            </graphic>
+                            <text>Instalar</text>
+                        </Button>
+                        <Button styleClass="btn-secondary" onAction="#removeSelected" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.6"/>
+                            </graphic>
+                            <text>Remover</text>
+                        </Button>
+                        <Button styleClass="btn-secondary" onAction="#showInstalled" focusTraversable="false">Ver instalados</Button>
+                        <Button styleClass="btn-secondary" onAction="#checkUpdates" focusTraversable="false">Verificar atualizações</Button>
+                        <Button styleClass="btn-secondary" onAction="#importModpack" focusTraversable="false">Importar modpack</Button>
+                        <Button styleClass="btn-secondary" onAction="#backupWorld" focusTraversable="false">Backup save</Button>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button styleClass="btn-secondary" onAction="#openModsFolder" focusTraversable="false">Abrir pasta mods</Button>
+                    </HBox>
+
+                    <ListView fx:id="modList" styleClass="content-list" VBox.vgrow="ALWAYS" prefHeight="300"/>
+                </VBox>
+
+                <!-- RESOURCE PACKS -->
+                <VBox fx:id="resourcePacksPane" spacing="18" visible="false">
+                    <padding><Insets top="28" bottom="28" left="32" right="32"/></padding>
+                    <Label text="Resource Packs" styleClass="page-title"/>
+                    <Text text="Pacotes de recursos instalados no perfil ativo." styleClass="info-text"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <HBox styleClass="search-wrap" HBox.hgrow="ALWAYS" alignment="CENTER_LEFT" spacing="10">
+                            <padding><Insets left="14" right="14"/></padding>
+                            <SVGPath content="M21 21l-4.35-4.35 M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z"
+                                     fill="TRANSPARENT" stroke="#6b7385" strokeWidth="1.6"/>
+                            <TextField fx:id="resourcePackSearch" promptText="Filtrar resource packs..."
+                                       styleClass="search-field" HBox.hgrow="ALWAYS"/>
+                        </HBox>
+                        <Button styleClass="btn-secondary" onAction="#openResourcePacksFolder" focusTraversable="false">Abrir pasta</Button>
+                        <Button styleClass="btn-primary" onAction="#refreshResourcePacks" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+                                         fill="TRANSPARENT" stroke="#0a0e1a" strokeWidth="1.8"/>
+                            </graphic>
+                            <text>Atualizar</text>
+                        </Button>
+                    </HBox>
+                    <ListView fx:id="resourcePackList" styleClass="content-list" VBox.vgrow="ALWAYS" prefHeight="300"/>
+                </VBox>
+
+                <!-- SAVES -->
+                <VBox fx:id="savesPane" spacing="18" visible="false">
+                    <padding><Insets top="28" bottom="28" left="32" right="32"/></padding>
+                    <Label text="Saves / Mundos" styleClass="page-title"/>
+                    <Text text="Mundos salvos do Minecraft no perfil ativo." styleClass="info-text"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <HBox styleClass="search-wrap" HBox.hgrow="ALWAYS" alignment="CENTER_LEFT" spacing="10">
+                            <padding><Insets left="14" right="14"/></padding>
+                            <SVGPath content="M21 21l-4.35-4.35 M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z"
+                                     fill="TRANSPARENT" stroke="#6b7385" strokeWidth="1.6"/>
+                            <TextField fx:id="saveSearch" promptText="Filtrar saves..."
+                                       styleClass="search-field" HBox.hgrow="ALWAYS"/>
+                        </HBox>
+                        <Button styleClass="btn-secondary" onAction="#openSavesFolder" focusTraversable="false">Abrir pasta</Button>
+                        <Button styleClass="btn-secondary" onAction="#backupWorld" focusTraversable="false">Backup save</Button>
+                        <Button styleClass="btn-primary" onAction="#refreshSaves" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+                                         fill="TRANSPARENT" stroke="#0a0e1a" strokeWidth="1.8"/>
+                            </graphic>
+                            <text>Atualizar</text>
+                        </Button>
+                    </HBox>
+                    <ListView fx:id="saveList" styleClass="content-list" VBox.vgrow="ALWAYS" prefHeight="300"/>
+                </VBox>
+
+                <!-- SCREENSHOTS -->
+                <VBox fx:id="screenshotsPane" spacing="18" visible="false">
+                    <padding><Insets top="28" bottom="28" left="32" right="32"/></padding>
+                    <Label text="Screenshots" styleClass="page-title"/>
+                    <Text text="Capturas de tela do Minecraft no perfil ativo." styleClass="info-text"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <HBox styleClass="search-wrap" HBox.hgrow="ALWAYS" alignment="CENTER_LEFT" spacing="10">
+                            <padding><Insets left="14" right="14"/></padding>
+                            <SVGPath content="M21 21l-4.35-4.35 M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z"
+                                     fill="TRANSPARENT" stroke="#6b7385" strokeWidth="1.6"/>
+                            <TextField fx:id="screenshotSearch" promptText="Filtrar screenshots..."
+                                       styleClass="search-field" HBox.hgrow="ALWAYS"/>
+                        </HBox>
+                        <Button styleClass="btn-secondary" onAction="#openScreenshotsFolder" focusTraversable="false">Abrir pasta</Button>
+                        <Button styleClass="btn-primary" onAction="#refreshScreenshots" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+                                         fill="TRANSPARENT" stroke="#0a0e1a" strokeWidth="1.8"/>
+                            </graphic>
+                            <text>Atualizar</text>
+                        </Button>
+                    </HBox>
+                    <ListView fx:id="screenshotList" styleClass="content-list" VBox.vgrow="ALWAYS" prefHeight="300"/>
+                </VBox>
+
+                <!-- SETTINGS -->
+                <VBox fx:id="settingsPane" spacing="20" visible="false">
+                    <padding><Insets top="28" bottom="28" left="32" right="32"/></padding>
+                    <Label text="Configurações" styleClass="page-title"/>
+                    <Text text="Ajuste memória, Java e preferências do launcher." styleClass="info-text"/>
+
+                    <VBox styleClass="settings-group" spacing="14">
+                        <padding><Insets top="20" bottom="20" left="22" right="22"/></padding>
+                        <Label text="Memória RAM" styleClass="group-title"/>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Mínimo" styleClass="setting-label" prefWidth="72"/>
+                            <TextField fx:id="minRamField" styleClass="ram-field" prefWidth="140"/>
+                            <Label text="MB" styleClass="ram-unit"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Máximo" styleClass="setting-label" prefWidth="72"/>
+                            <TextField fx:id="maxRamField" styleClass="ram-field" prefWidth="140"/>
+                            <Label text="MB" styleClass="ram-unit"/>
+                        </HBox>
+                    </VBox>
+
+                    <VBox styleClass="settings-group" spacing="14">
+                        <padding><Insets top="20" bottom="20" left="22" right="22"/></padding>
+                        <Label text="Java" styleClass="group-title"/>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <ComboBox fx:id="javaCombo" styleClass="filter-combo" HBox.hgrow="ALWAYS"/>
+                            <Button text="Detectar" styleClass="btn-secondary" focusTraversable="false"/>
+                        </HBox>
+                    </VBox>
+
+                    <VBox styleClass="settings-group" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="22" right="22"/></padding>
+                        <Label text="Preferências" styleClass="group-title"/>
+                        <CheckBox fx:id="snapshotsCheck" text="Mostrar snapshots" styleClass="check-box"/>
+                        <CheckBox fx:id="keepOpenCheck" text="Manter launcher aberto após iniciar o jogo" styleClass="check-box"
+                                  selected="true"/>
+                    </VBox>
+
+                    <HBox alignment="CENTER_RIGHT">
+                        <Button text="Salvar Configurações" styleClass="btn-primary" onAction="#saveSettings" focusTraversable="false"/>
+                    </HBox>
+                </VBox>
+            </StackPane>
+
+            <!-- CONSOLE -->
+            <VBox styleClass="console-section">
+                <HBox styleClass="console-header" alignment="CENTER_LEFT" spacing="10">
+                    <Region styleClass="console-live-dot"/>
+                    <Label text="TERMINAL · LIVE OUTPUT" styleClass="console-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label text="AUTO-SCROLL" styleClass="console-hint"/>
+                    <Region styleClass="status-divider"/>
+                    <Label text="STREAM" styleClass="console-hint"/>
+                </HBox>
+                <TextArea fx:id="consoleArea" styleClass="console-area" prefHeight="120"
+                          editable="false" wrapText="true" VBox.vgrow="ALWAYS"/>
+            </VBox>
+
+            <!-- STATUS BAR -->
+            <HBox styleClass="status-bar" alignment="CENTER_LEFT" spacing="14" prefHeight="34">
+                <padding><Insets left="20" right="20"/></padding>
+                <Region styleClass="status-pulse"/>
+                <Label fx:id="statusLabel" text="Pronto · sistema inicializado" styleClass="status-text" HBox.hgrow="ALWAYS"/>
+                <Region styleClass="status-divider"/>
+                <Label text="CLOCK" styleClass="status-info"/>
+                <Label fx:id="statusClockLabel" text="--:--:--" styleClass="status-text-accent"/>
+                <Region styleClass="status-divider"/>
+                <Label text="JAVA" styleClass="status-info"/>
+                <Label fx:id="statusJavaLabel" text="--" styleClass="status-text-accent"/>
+                <Region styleClass="status-divider"/>
+                <Label text="RAM" styleClass="status-info"/>
+                <Label fx:id="statusRamLabel" text="--/-- MB" styleClass="status-text"/>
+                <Region styleClass="status-divider"/>
+                <Label text="NET" styleClass="status-info"/>
+                <Label fx:id="statusNetLabel" text="…" styleClass="status-text"/>
+                <Region styleClass="status-divider"/>
+                <ProgressBar fx:id="progressBar" prefWidth="160" progress="0" styleClass="progress-bar"/>
+            </HBox>
+        </VBox>
+    </center>
+    </BorderPane>
+</StackPane>

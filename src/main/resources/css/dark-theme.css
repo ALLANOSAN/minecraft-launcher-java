@@ -1,0 +1,1481 @@
+/* =====================================================
+   MineLauncher — Obsidian Terminal
+   Design system v2 · intentional · technical · refined
+   =====================================================
+   Palette
+   ────────────────────────────────────────────────────
+   Base        #0A0D14   ─ deepest, app background
+   Surface 1   #11151E   ─ panels (sidebar, console)
+   Surface 2   #161B27   ─ cards, inputs
+   Surface 3   #1C2233   ─ hover elevation
+   Border      #1A2030   ─ quiet dividers
+   Border hi   #2A3247   ─ interactive borders
+   Border crit #3A4566   ─ focus
+
+   Text hi     #E8EAF1   ─ primary
+   Text med    #8A93AB   ─ secondary
+   Text low    #5A6273   ─ muted
+   Text dim    #3D4456   ─ disabled
+
+   Accent      #9EFF8E   ─ signature green (play, active)
+   Accent dim  #6CCB6F   ─ hover-out green
+   Warm        #FFB454   ─ amber (warn, snapshot, highlight)
+   Cool        #7DD3FC   ─ cyan (info, MS)
+   Danger      #F87171   ─ destructive
+   ===================================================== */
+
+* {
+    -fx-font-family: "Fira Sans", "Cantarell", "DejaVu Sans", "Helvetica Neue", sans-serif;
+    -fx-font-smooth-type: gray;
+    -fx-text-fill: #E8EAF1;
+    
+    /* Variáveis globais de tema - devem estar aqui para funcionar em tudo */
+    -fx-base: #0A0D14;
+    -fx-background: #0A0D14;
+    -fx-control-inner-background: #11151E;
+    -fx-accent: #9EFF8E;
+    -fx-focus-color: #9EFF8E55;
+    -fx-faint-focus-color: transparent;
+}
+
+/* ──────────────── ROOT & CONTAINER ──────────────── */
+
+.root-pane-transparent {
+    -fx-background-color: transparent;
+    -fx-padding: 15;
+}
+
+.root-pane-transparent.maximized {
+    -fx-padding: 0;
+}
+
+.main-container {
+    -fx-background-color: #0A0D14;
+    -fx-background-radius: 12;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.8), 20, 0, 0, 4);
+    
+    -fx-background-image: url("/images/grid-pattern.png");
+    -fx-background-repeat: repeat;
+    -fx-background-position: 0 0;
+}
+
+.main-container.maximized {
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-border-width: 0;
+}
+
+.root-pane {
+    /* Esta classe pode ser mantida para compatibilidade, mas o tema agora é global */
+    -fx-text-fill: #E8EAF1;
+}
+
+/* ──────────────── HEADER ──────────────── */
+
+.header-bar {
+    -fx-background-color: linear-gradient(to bottom, #0D1018, #0A0D14);
+    -fx-border-color: #1A2030;
+    -fx-border-width: 0 0 1 0;
+    -fx-effect: dropshadow(gaussian, #00000088, 8, 0, 0, 2);
+    -fx-min-height: 64;
+    -fx-pref-height: 64;
+    -fx-max-height: 64;
+    -fx-padding: 14 14 0 20;
+    -fx-min-width: 0;
+    -fx-pref-width: infinity;
+}
+
+.brand-mark {
+    -fx-background-color: linear-gradient(to bottom right, #9EFF8E, #2EA84A);
+    -fx-background-radius: 6;
+    -fx-pref-width: 28;
+    -fx-pref-height: 28;
+    -fx-min-width: 28;
+    -fx-min-height: 28;
+    -fx-max-width: 28;
+    -fx-max-height: 28;
+    -fx-effect: dropshadow(gaussian, #9EFF8E55, 10, 0, 0, 0),
+                innershadow(gaussian, #FFFFFF44, 1, 0, 0, 1);
+}
+
+.brand-mark-label {
+    -fx-text-fill: #0A0D14;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 17px;
+    -fx-font-weight: 900;
+    -fx-padding: 0 0 1 0;
+}
+
+.header-title {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 15px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 2.5px;
+}
+
+.header-tag {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 1.2px;
+    -fx-padding: 2 0 0 0;
+}
+
+.session-chip {
+    -fx-background-color: #0A0D14;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 6 12;
+    -fx-spacing: 14;
+    -fx-alignment: center-left;
+    -fx-effect: innershadow(gaussian, #00000066, 1, 0, 0, 0);
+}
+
+.session-chip-divider {
+    -fx-background-color: #1A2030;
+    -fx-pref-width: 1;
+    -fx-pref-height: 18;
+    -fx-min-width: 1;
+    -fx-min-height: 18;
+    -fx-max-width: 1;
+    -fx-max-height: 18;
+}
+
+.session-chip-label {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 1.2px;
+}
+
+.session-chip-value {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 600;
+}
+
+.session-chip-accent {
+    -fx-text-fill: #9EFF8E;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+.session-chip-warm {
+    -fx-text-fill: #FFB454;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+.session-chip-cool {
+    -fx-text-fill: #7DD3FC;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+.session-chip-danger {
+    -fx-text-fill: #F87171;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+/* Window buttons — chunky, focused */
+.window-btn {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-padding: 7;
+    -fx-cursor: hand;
+    -fx-content-display: graphic-only;
+    -fx-pref-width: 34;
+    -fx-pref-height: 28;
+    -fx-border-color: transparent;
+    -fx-border-radius: 6;
+}
+
+.window-btn:hover {
+    -fx-background-color: #1A2030;
+}
+
+.window-btn:hover .svg-path {
+    -fx-stroke: #E8EAF1;
+}
+
+.window-close:hover {
+    -fx-background-color: #E5484D;
+}
+
+.window-close:hover .svg-path {
+    -fx-stroke: white;
+}
+
+.window-btn .svg-path {
+    -fx-stroke: #5A6273;
+    -fx-stroke-width: 1.6;
+}
+
+/* ──────────────── SIDEBAR ──────────────── */
+
+.sidebar {
+    -fx-background-color: #0D1018;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 0 1 0 0;
+    -fx-min-height: 0;
+}
+
+/* accent line on the very right edge of the sidebar (signature) */
+.sidebar-accent {
+    -fx-background-color: #9EFF8E55;
+    -fx-pref-width: 1;
+    -fx-min-width: 1;
+    -fx-max-width: 1;
+}
+
+.sidebar-divider {
+    -fx-background-color: #1A2030;
+    -fx-pref-height: 1;
+    -fx-max-height: 1;
+}
+
+.sidebar-section {
+    -fx-spacing: 8;
+}
+
+.section-label {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 2.2px;
+    -fx-padding: 0 0 0 2;
+}
+
+/* ── User Card ── */
+.user-card {
+    -fx-background-color: linear-gradient(to bottom, #131826, #0F1320);
+    -fx-border-color: #1A2030;
+    -fx-border-width: 0 0 1 0;
+}
+
+.avatar-circle {
+    -fx-background-color: linear-gradient(to bottom right, #9EFF8E, #2EA84A);
+    -fx-background-radius: 24;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 24;
+    -fx-border-width: 2;
+    -fx-pref-width: 46;
+    -fx-pref-height: 46;
+    -fx-min-width: 46;
+    -fx-min-height: 46;
+    -fx-max-width: 46;
+    -fx-max-height: 46;
+    -fx-effect: dropshadow(gaussian, #9EFF8E55, 12, 0, 0, 0);
+}
+
+.avatar-initial {
+    -fx-text-fill: #0A0D14;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 19px;
+    -fx-font-weight: 900;
+    -fx-padding: 0 0 1 0;
+}
+
+.user-name {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+}
+
+.user-status {
+    -fx-text-fill: #8A93AB;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 600;
+    -fx-letter-spacing: 0.5px;
+}
+
+.status-dot {
+    -fx-background-color: #5A6273;
+    -fx-background-radius: 4;
+    -fx-pref-width: 6;
+    -fx-pref-height: 6;
+    -fx-min-width: 6;
+    -fx-min-height: 6;
+    -fx-max-width: 6;
+    -fx-max-height: 6;
+}
+
+.status-dot-online {
+    -fx-background-color: #9EFF8E;
+    -fx-effect: dropshadow(gaussian, #9EFF8E99, 6, 0, 0, 0);
+}
+
+/* ── Sidebar Buttons (Ghost) ── */
+.btn-ghost {
+    -fx-background-color: #11151E;
+    -fx-text-fill: #C0C8D8;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-padding: 9 8;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-content-display: left;
+    -fx-graphic-text-gap: 5;
+    -fx-alignment: center-left;
+    -fx-text-overrun: ellipsis;
+}
+
+.btn-ghost:hover {
+    -fx-background-color: #161B27;
+    -fx-border-color: #2A3247;
+    -fx-text-fill: #E8EAF1;
+}
+
+.btn-ghost:pressed {
+    -fx-background-color: #0D1018;
+}
+
+.btn-ghost .svg-path {
+    -fx-stroke: #5A6273;
+    -fx-stroke-width: 1.5;
+    -fx-fill: transparent;
+    -fx-scale-x: 0.85;
+    -fx-scale-y: 0.85;
+}
+
+.btn-ghost:hover .svg-path {
+    -fx-stroke: #E8EAF1;
+}
+
+.btn-ghost-accent {
+    -fx-border-color: #9EFF8E33;
+    -fx-text-fill: #9EFF8E;
+}
+
+.btn-ghost-accent:hover {
+    -fx-border-color: #9EFF8E;
+    -fx-background-color: #9EFF8E11;
+    -fx-text-fill: #9EFF8E;
+}
+
+.btn-ghost-accent .svg-path {
+    -fx-stroke: #9EFF8E;
+}
+
+.btn-ghost-microsoft {
+    -fx-border-color: #7DD3FC33;
+    -fx-text-fill: #7DD3FC;
+}
+
+.btn-ghost-microsoft:hover {
+    -fx-border-color: #7DD3FC;
+    -fx-background-color: #7DD3FC11;
+    -fx-text-fill: #7DD3FC;
+}
+
+.btn-ghost-microsoft .svg-path {
+    -fx-fill: #7DD3FC;
+    -fx-stroke: transparent;
+}
+
+.btn-link-danger {
+    -fx-background-color: transparent;
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 1px;
+    -fx-padding: 6 4;
+    -fx-cursor: hand;
+    -fx-content-display: left;
+    -fx-graphic-text-gap: 6;
+    -fx-alignment: center-left;
+    -fx-border-color: transparent;
+}
+
+.btn-link-danger:hover {
+    -fx-text-fill: #F87171;
+}
+
+.btn-link-danger .svg-path {
+    -fx-stroke: #F87171;
+    -fx-stroke-width: 1.4;
+}
+
+/* ── Combo (sidebar) ── */
+.profile-combo {
+    -fx-background-color: #11151E;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 4 8;
+}
+
+.profile-combo:hover {
+    -fx-border-color: #2A3247;
+}
+
+.profile-combo:focused {
+    -fx-border-color: #9EFF8E55;
+}
+
+.profile-combo .list-cell {
+    -fx-text-fill: #E8EAF1;
+    -fx-background-color: #11151E;
+    -fx-padding: 6 8;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 12px;
+}
+
+.profile-combo .arrow {
+    -fx-background-color: #5A6273;
+}
+
+.profile-combo .arrow-button {
+    -fx-padding: 0 8;
+}
+
+/* ── Nav buttons ── */
+.nav-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #8A93AB;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-padding: 11 14 11 16;
+    -fx-cursor: hand;
+    -fx-background-radius: 8;
+    -fx-content-display: left;
+    -fx-graphic-text-gap: 12;
+    -fx-alignment: center-left;
+    -fx-border-color: transparent;
+    -fx-border-radius: 8;
+    -fx-border-width: 0 0 0 3;
+}
+
+.nav-btn:hover {
+    -fx-background-color: #11151E;
+    -fx-text-fill: #E8EAF1;
+}
+
+.nav-btn:pressed {
+    -fx-background-color: #161B27;
+}
+
+.nav-btn .svg-path {
+    -fx-stroke: #5A6273;
+    -fx-stroke-width: 1.5;
+    -fx-fill: transparent;
+}
+
+.nav-btn:hover .svg-path {
+    -fx-stroke: #9EFF8E;
+}
+
+/* ACTIVE state — chunky indicator on the left + tinted background */
+.nav-btn.active {
+    -fx-background-color: #9EFF8E11;
+    -fx-text-fill: #9EFF8E;
+    -fx-border-color: #9EFF8E;
+}
+
+.nav-btn.active .svg-path {
+    -fx-stroke: #9EFF8E;
+}
+
+/* ── Play Section (the hero) ── */
+.play-section {
+    -fx-background-color: #0A0D14;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 1 0 0 0;
+}
+
+.play-button {
+    -fx-background-color: linear-gradient(to bottom right, #9EFF8E, #2EA84A);
+    -fx-background-radius: 10;
+    -fx-text-fill: #0A0D14;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 18px;
+    -fx-font-weight: 900;
+    -fx-letter-spacing: 2.5px;
+    -fx-cursor: hand;
+    -fx-content-display: left;
+    -fx-graphic-text-gap: 14;
+    -fx-alignment: center;
+    -fx-padding: 0 0 0 22;
+    -fx-border-color: #9EFF8E;
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, #9EFF8E55, 14, 0, 0, 4),
+                innershadow(gaussian, #FFFFFF33, 1, 0, 0, 1);
+}
+
+.play-button:hover {
+    -fx-effect: dropshadow(gaussian, #9EFF8E99, 22, 0, 0, 6),
+                innershadow(gaussian, #FFFFFF44, 1, 0, 0, 1);
+}
+
+.play-button:pressed {
+    -fx-background-color: linear-gradient(to bottom right, #6CCB6F, #2EA84A);
+}
+
+.play-button:disabled {
+    -fx-background-color: #11151E;
+    -fx-text-fill: #3D4456;
+    -fx-border-color: #1A2030;
+    -fx-effect: null;
+}
+
+.play-button:disabled .svg-path {
+    -fx-fill: #3D4456;
+}
+
+.play-button .svg-path {
+    -fx-fill: #0A0D14;
+    -fx-stroke: transparent;
+}
+
+/* ──────────────── CONTENT ──────────────── */
+
+.content-wrapper {
+    -fx-background-color: #0A0D14;
+}
+
+.content-pane {
+    -fx-background-color: #0A0D14;
+    -fx-background: #0A0D14;
+}
+
+/* ── Titles ── */
+.welcome-title {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 36px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: -0.5px;
+}
+
+.welcome-eyebrow {
+    -fx-text-fill: #9EFF8E;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 2px;
+}
+
+.page-title {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 28px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: -0.3px;
+}
+
+.info-text {
+    -fx-fill: #8A93AB;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+}
+
+/* ── Stat Cards ── */
+.stat-card {
+    -fx-background-color: #11151E;
+    -fx-background-radius: 10;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 10;
+    -fx-effect: dropshadow(gaussian, #00000088, 0, 0, 4, 4);
+    -fx-cursor: default;
+}
+
+.stat-card:hover {
+    -fx-border-color: #2A3247;
+    -fx-effect: dropshadow(gaussian, #000000aa, 0, 0, 6, 6);
+}
+
+.stat-label {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 1.8px;
+}
+
+.stat-value {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 32px;
+    -fx-font-weight: 800;
+    -fx-padding: 2 0 0 0;
+}
+
+.stat-suffix {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-padding: 8 0 0 0;
+}
+
+.stat-trend {
+    -fx-text-fill: #9EFF8E;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+.stat-trend-down {
+    -fx-text-fill: #FFB454;
+}
+
+.stat-icon-wrap {
+    -fx-background-color: #161B27;
+    -fx-background-radius: 8;
+    -fx-pref-width: 38;
+    -fx-pref-height: 38;
+    -fx-min-width: 38;
+    -fx-min-height: 38;
+    -fx-max-width: 38;
+    -fx-max-height: 38;
+    -fx-border-radius: 8;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 1;
+}
+
+.stat-icon-green {
+    -fx-background-color: #9EFF8E14;
+    -fx-border-color: #9EFF8E44;
+}
+
+.stat-icon-amber {
+    -fx-background-color: #FFB45414;
+    -fx-border-color: #FFB45444;
+}
+
+.stat-icon-cyan {
+    -fx-background-color: #7DD3FC14;
+    -fx-border-color: #7DD3FC44;
+}
+
+.stat-icon-violet {
+    -fx-background-color: #A78BFA14;
+    -fx-border-color: #A78BFA44;
+}
+
+/* ── Quick Play / Hero Card ── */
+.quick-play-card {
+    -fx-background-color: linear-gradient(to bottom right, #131826, #0F1320);
+    -fx-background-radius: 12;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, #00000088, 0, 0, 6, 6);
+}
+
+.quick-play-card::before { /* (no-op, kept for reference) */ }
+
+.quick-play-icon {
+    -fx-background-color: #9EFF8E14;
+    -fx-background-radius: 12;
+    -fx-pref-width: 52;
+    -fx-pref-height: 52;
+    -fx-min-width: 52;
+    -fx-min-height: 52;
+    -fx-max-width: 52;
+    -fx-max-height: 52;
+    -fx-border-color: #9EFF8E;
+    -fx-border-radius: 12;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, #9EFF8E55, 10, 0, 0, 0);
+}
+
+.quick-play-title {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 17px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: -0.1px;
+}
+
+.quick-play-subtitle {
+    -fx-text-fill: #8A93AB;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+}
+
+.quick-play-meta {
+    -fx-text-fill: #9EFF8E;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 0.5px;
+}
+
+/* ── Search ── */
+.search-wrap {
+    -fx-background-color: #11151E;
+    -fx-background-radius: 8;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-pref-height: 40;
+    -fx-effect: innershadow(gaussian, #00000066, 1, 0, 0, 0);
+}
+
+.search-wrap:focused-within {
+    -fx-border-color: #9EFF8E55;
+    -fx-effect: innershadow(gaussian, #00000066, 1, 0, 0, 0),
+                dropshadow(gaussian, #9EFF8E33, 8, 0, 0, 0);
+}
+
+.search-field {
+    -fx-background-color: transparent;
+    -fx-text-fill: #E8EAF1;
+    -fx-prompt-text-fill: #5A6273;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+    -fx-padding: 10 0;
+    -fx-border-width: 0;
+}
+
+.search-field:focused {
+    -fx-border-width: 0;
+    -fx-background-color: transparent;
+    -fx-effect: null;
+}
+
+.search-wrap .svg-path {
+    -fx-stroke: #5A6273;
+    -fx-stroke-width: 1.5;
+}
+
+.filter-combo {
+    -fx-background-color: #11151E;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-pref-height: 40;
+    -fx-padding: 0 10;
+}
+
+.filter-combo .list-cell {
+    -fx-text-fill: #E8EAF1;
+    -fx-background-color: #11151E;
+}
+
+.filter-combo:hover {
+    -fx-border-color: #2A3247;
+}
+
+/* ── Action row (modos) ── */
+.action-row {
+    -fx-padding: 0;
+}
+
+/* ── ListView ── */
+.content-list {
+    -fx-background-color: #0D1018;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-effect: innershadow(gaussian, #00000066, 1, 0, 0, 0);
+}
+
+.content-list .list-cell {
+    -fx-text-fill: #C0C8D8;
+    -fx-padding: 14 18;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #11151E transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+}
+
+.content-list .list-cell:hover {
+    -fx-background-color: #11151E;
+    -fx-text-fill: #E8EAF1;
+    -fx-cursor: hand;
+}
+
+.content-list .list-cell:selected {
+    -fx-background-color: #9EFF8E11;
+    -fx-text-fill: #9EFF8E;
+    -fx-border-color: transparent transparent #11151E transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.content-list .list-cell:selected .label {
+    -fx-text-fill: #9EFF8E;
+}
+
+.content-list .placeholder .label {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 11px;
+}
+
+/* ── Settings groups ── */
+.settings-group {
+    -fx-background-color: #11151E;
+    -fx-background-radius: 10;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 10;
+}
+
+.group-title {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 15px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 0.5px;
+}
+
+.setting-label {
+    -fx-text-fill: #8A93AB;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+}
+
+.ram-field {
+    -fx-background-color: #161B27;
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 8 12;
+    -fx-pref-height: 38;
+    -fx-alignment: center-right;
+    -fx-prompt-text-fill: #3D4456;
+}
+
+.ram-field:focused {
+    -fx-border-color: #9EFF8E55;
+    -fx-effect: dropshadow(gaussian, #9EFF8E33, 6, 0, 0, 0);
+}
+
+.ram-unit {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 1px;
+}
+
+/* ── Sidebar nav scrollable ── */
+.sidebar-section-nav {
+    -fx-spacing: 4;
+    -fx-min-height: 0;
+}
+
+.nav-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.nav-scroll .viewport {
+    -fx-background-color: transparent;
+}
+
+.nav-scroll .scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 8;
+    -fx-min-width: 8;
+    -fx-padding: 0;
+}
+
+.nav-scroll .scroll-bar:vertical .thumb {
+    -fx-background-color: #2A3247;
+    -fx-background-radius: 4;
+    -fx-opacity: 0.9;
+}
+
+.nav-scroll .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: #9EFF8E;
+}
+
+.nav-scroll .scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-border-width: 0;
+}
+
+.nav-scroll .scroll-bar:vertical .increment-button,
+.nav-scroll .scroll-bar:vertical .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+    -fx-min-width: 0;
+    -fx-min-height: 0;
+}
+
+.nav-scroll .scroll-bar:vertical .increment-arrow,
+.nav-scroll .scroll-bar:vertical .decrement-arrow {
+    -fx-shape: "";
+    -fx-padding: 0;
+}
+
+.nav-scroll .corner {
+    -fx-background-color: transparent;
+}
+
+/* ── CheckBox ── */
+.check-box {
+    -fx-text-fill: #C0C8D8;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-cursor: hand;
+}
+
+.check-box .box {
+    -fx-background-color: #11151E;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-min-width: 18;
+    -fx-min-height: 18;
+    -fx-max-width: 18;
+    -fx-max-height: 18;
+    -fx-padding: 0;
+}
+
+.check-box:hover .box {
+    -fx-border-color: #2A3247;
+}
+
+.check-box:selected .box {
+    -fx-background-color: #9EFF8E;
+    -fx-border-color: #9EFF8E;
+}
+
+.check-box:selected .mark {
+    -fx-background-color: #0A0D14;
+    -fx-shape: "M5 10L10 15L16 5";
+    -fx-stroke: #0A0D14;
+}
+
+/* ──────────────── BUTTONS ──────────────── */
+
+.btn-primary {
+    -fx-background-color: #9EFF8E;
+    -fx-text-fill: #0A0D14;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+    -fx-font-weight: 800;
+    -fx-background-radius: 8;
+    -fx-padding: 10 18;
+    -fx-cursor: hand;
+    -fx-content-display: left;
+    -fx-graphic-text-gap: 8;
+    -fx-alignment: center;
+    -fx-pref-height: 40;
+    -fx-border-color: transparent;
+    -fx-border-radius: 8;
+    -fx-effect: dropshadow(gaussian, #9EFF8E33, 6, 0, 0, 0);
+}
+
+.btn-primary:hover {
+    -fx-background-color: #B4FFA6;
+    -fx-effect: dropshadow(gaussian, #9EFF8E66, 10, 0, 0, 0);
+}
+
+.btn-primary:pressed {
+    -fx-background-color: #6CCB6F;
+}
+
+.btn-primary .svg-path {
+    -fx-stroke: #0A0D14;
+    -fx-fill: transparent;
+    -fx-stroke-width: 1.7;
+}
+
+.btn-secondary {
+    -fx-background-color: #11151E;
+    -fx-text-fill: #C0C8D8;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-background-radius: 8;
+    -fx-padding: 10 16;
+    -fx-cursor: hand;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-content-display: left;
+    -fx-graphic-text-gap: 8;
+    -fx-alignment: center;
+    -fx-pref-height: 40;
+}
+
+.btn-secondary:hover {
+    -fx-background-color: #161B27;
+    -fx-border-color: #2A3247;
+    -fx-text-fill: #E8EAF1;
+}
+
+.btn-secondary:pressed {
+    -fx-background-color: #0D1018;
+}
+
+.btn-secondary .svg-path {
+    -fx-stroke: #5A6273;
+    -fx-fill: transparent;
+    -fx-stroke-width: 1.5;
+}
+
+.btn-secondary:hover .svg-path {
+    -fx-stroke: #E8EAF1;
+}
+
+/* ──────────────── CONSOLE ──────────────── */
+
+.console-section {
+    -fx-background-color: #0A0D14;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 1 0 0 0;
+}
+
+.console-header {
+    -fx-background-color: #0D1018;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 10 20;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
+}
+
+.console-title {
+    -fx-text-fill: #8A93AB;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 2px;
+}
+
+.console-hint {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 1.5px;
+}
+
+.console-live-dot {
+    -fx-background-color: #9EFF8E;
+    -fx-background-radius: 4;
+    -fx-pref-width: 7;
+    -fx-pref-height: 7;
+    -fx-min-width: 7;
+    -fx-min-height: 7;
+    -fx-max-width: 7;
+    -fx-max-height: 7;
+    -fx-effect: dropshadow(gaussian, #9EFF8E99, 6, 0, 0, 0);
+}
+
+.console-area {
+    -fx-control-inner-background: #0A0D14;
+    -fx-background-color: #0A0D14;
+    -fx-text-fill: #9EFF8E;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 11px;
+    -fx-highlight-fill: #9EFF8E22;
+    -fx-highlight-text-fill: #FFFFFF;
+    -fx-border-color: transparent;
+}
+
+.console-area .scroll-pane {
+    -fx-background-color: #0A0D14;
+}
+
+.console-area .scroll-pane .viewport {
+    -fx-background-color: #0A0D14;
+}
+
+.console-area .content {
+    -fx-background-color: #0A0D14;
+}
+
+/* ──────────────── STATUS BAR ──────────────── */
+
+.status-bar {
+    -fx-background-color: #0D1018;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 0;
+}
+
+.status-pulse {
+    -fx-background-color: #9EFF8E;
+    -fx-background-radius: 4;
+    -fx-pref-width: 7;
+    -fx-pref-height: 7;
+    -fx-min-width: 7;
+    -fx-min-height: 7;
+    -fx-max-width: 7;
+    -fx-max-height: 7;
+    -fx-effect: dropshadow(gaussian, #9EFF8E99, 8, 0, 0, 0);
+}
+
+.status-text {
+    -fx-text-fill: #8A93AB;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 600;
+}
+
+.status-text-accent {
+    -fx-text-fill: #9EFF8E;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+.status-text-warm {
+    -fx-text-fill: #FFB454;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+.status-text-cool {
+    -fx-text-fill: #7DD3FC;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+.status-text-danger {
+    -fx-text-fill: #F87171;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+.status-divider {
+    -fx-background-color: #1A2030;
+    -fx-pref-width: 1;
+    -fx-pref-height: 14;
+    -fx-min-width: 1;
+    -fx-min-height: 14;
+    -fx-max-width: 1;
+    -fx-max-height: 14;
+}
+
+.status-info {
+    -fx-text-fill: #5A6273;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 1px;
+}
+
+.progress-bar {
+    -fx-pref-height: 4;
+    -fx-background-color: transparent;
+}
+
+.progress-bar .track {
+    -fx-background-color: #1A2030;
+    -fx-background-radius: 2;
+}
+
+.progress-bar .bar {
+    -fx-background-color: linear-gradient(to right, #9EFF8E, #2EA84A);
+    -fx-background-radius: 2;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+/* ──────────────── SCROLLBAR (global) ──────────────── */
+
+.scroll-bar {
+    -fx-background-color: transparent;
+    -fx-pref-width: 10;
+    -fx-pref-height: 10;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #2A3247;
+    -fx-background-radius: 5;
+    -fx-opacity: 0.8;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #3A4566;
+    -fx-opacity: 1;
+}
+
+.scroll-bar .track {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+    -fx-min-width: 0;
+    -fx-min-height: 0;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-shape: "";
+    -fx-padding: 0;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+}
+
+.scroll-bar:vertical .increment-arrow,
+.scroll-bar:vertical .decrement-arrow {
+    -fx-shape: "";
+    -fx-padding: 0;
+}
+
+.list-view .scroll-bar:vertical {
+    -fx-pref-width: 10;
+}
+
+/* ──────────────── TOOLTIP ──────────────── */
+
+.tooltip {
+    -fx-background-color: #161B27;
+    -fx-text-fill: #E8EAF1;
+    -fx-border-color: #2A3247;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 0.5px;
+    -fx-padding: 6 10;
+    -fx-effect: dropshadow(gaussian, #000000aa, 0, 0, 4, 4);
+}
+
+/* ──────────────── SEPARATOR ──────────────── */
+
+.separator {
+    -fx-padding: 8 0;
+}
+
+.separator .line {
+    -fx-border-color: #1A2030;
+    -fx-border-width: 1 0 0 0;
+}
+
+/* ──────────────── CONTEXT MENU ──────────────── */
+
+.context-menu {
+    -fx-background-color: #161B27;
+    -fx-border-color: #2A3247;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-padding: 6;
+    -fx-effect: dropshadow(gaussian, #00000088, 0, 0, 6, 6);
+}
+
+.menu-item {
+    -fx-padding: 8 12;
+    -fx-background-radius: 4;
+}
+
+.menu-item .label {
+    -fx-text-fill: #C0C8D8;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+}
+
+.menu-item:hover,
+.menu-item:focused {
+    -fx-background-color: #9EFF8E14;
+}
+
+.menu-item:hover .label,
+.menu-item:focused .label {
+    -fx-text-fill: #9EFF8E;
+}
+
+.menu-item:disabled {
+    -fx-opacity: 0.4;
+}
+
+/* ──────────────── ALERT / DIALOG ──────────────── */
+
+.dialog-pane {
+    -fx-background-color: #11151E;
+    -fx-border-color: #1A2030;
+    -fx-effect: dropshadow(gaussian, #00000088, 0, 0, 8, 8);
+}
+
+.dialog-pane .header-panel {
+    -fx-background-color: #0D1018;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 0 0 1 0;
+}
+
+.dialog-pane .header-panel .label {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans Compressed", "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 15px;
+    -fx-font-weight: 800;
+}
+
+.dialog-pane .content.label {
+    -fx-text-fill: #C0C8D8;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+    -fx-padding: 14 0;
+}
+
+.dialog-pane .button-bar .button {
+    -fx-background-color: #11151E;
+    -fx-text-fill: #C0C8D8;
+    -fx-font-weight: 600;
+    -fx-font-family: "Fira Sans", "Cantarell", sans-serif;
+    -fx-background-radius: 8;
+    -fx-padding: 8 16;
+    -fx-cursor: hand;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 8;
+}
+
+.dialog-pane .button-bar .button:hover {
+    -fx-background-color: #161B27;
+    -fx-border-color: #2A3247;
+    -fx-text-fill: #E8EAF1;
+}
+
+.dialog-pane .button-bar .button:default {
+    -fx-background-color: #9EFF8E;
+    -fx-text-fill: #0A0D14;
+    -fx-border-color: transparent;
+    -fx-font-weight: 800;
+}
+
+.dialog-pane .button-bar .button:default:hover {
+    -fx-background-color: #B4FFA6;
+}
+
+/* ──────────────── UTILITIES ──────────────── */
+
+.svg-path {
+    -fx-transition: -fx-stroke 150ms ease, -fx-fill 150ms ease;
+}
+
+.scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+.scroll-pane .corner {
+    -fx-background-color: transparent;
+}
+
+/* Accent dot — used in lists/status indicators */
+.accent-dot {
+    -fx-background-color: #9EFF8E;
+    -fx-background-radius: 3;
+    -fx-pref-width: 5;
+    -fx-pref-height: 5;
+    -fx-min-width: 5;
+    -fx-min-height: 5;
+    -fx-max-width: 5;
+    -fx-max-height: 5;
+    -fx-effect: dropshadow(gaussian, #9EFF8E99, 4, 0, 0, 0);
+}
+
+.accent-dot-warm {
+    -fx-background-color: #FFB454;
+    -fx-effect: dropshadow(gaussian, #FFB45499, 4, 0, 0, 0);
+}
+
+.accent-dot-cool {
+    -fx-background-color: #7DD3FC;
+    -fx-effect: dropshadow(gaussian, #7DD3FC99, 4, 0, 0, 0);
+}
+
+/* Mono inline label */
+.mono-label {
+    -fx-text-fill: #8A93AB;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-letter-spacing: 0.8px;
+}
+
+.mono-label-accent {
+    -fx-text-fill: #9EFF8E;
+}
+
+.mono-label-warm {
+    -fx-text-fill: #FFB454;
+}
+
+.mono-label-cool {
+    -fx-text-fill: #7DD3FC;
+}
+
+.mono-label-danger {
+    -fx-text-fill: #F87171;
+}
+
+/* Chip / pill */
+.chip {
+    -fx-background-color: #161B27;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 3 8;
+    -fx-font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", monospace;
+    -fx-font-size: 9px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #8A93AB;
+    -fx-letter-spacing: 1.2px;
+}
+
+.chip-accent {
+    -fx-background-color: #9EFF8E14;
+    -fx-border-color: #9EFF8E55;
+    -fx-text-fill: #9EFF8E;
+}
+
+.chip-warm {
+    -fx-background-color: #FFB45414;
+    -fx-border-color: #FFB45455;
+    -fx-text-fill: #FFB454;
+}
+
+.chip-cool {
+    -fx-background-color: #7DD3FC14;
+    -fx-border-color: #7DD3FC55;
+    -fx-text-fill: #7DD3FC;
+}

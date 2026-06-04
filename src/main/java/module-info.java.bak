@@ -1,0 +1,29 @@
+module com.minelauncher {
+    requires javafx.controls;
+    requires javafx.fxml;
+    requires javafx.web;
+    requires javafx.graphics;
+    requires com.google.gson;
+    requires okhttp3;
+    requires org.slf4j;
+    requires ch.qos.logback.classic;
+    requires ch.qos.logback.core;
+    requires java.desktop;
+    requires java.net.http;
+    requires jdk.httpserver;
+
+    opens com.minelauncher to javafx.fxml;
+    opens com.minelauncher.ui.controllers to javafx.fxml;
+    opens com.minelauncher.models to com.google.gson;
+    opens com.minelauncher.profiles to com.google.gson;
+    opens com.minelauncher.settings to com.google.gson;
+
+    exports com.minelauncher;
+    exports com.minelauncher.models;
+    exports com.minelauncher.auth;
+    exports com.minelauncher.launcher;
+    exports com.minelauncher.mods;
+    exports com.minelauncher.profiles;
+    exports com.minelauncher.settings;
+    exports com.minelauncher.ui.controllers;
+}

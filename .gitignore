@@ -1,0 +1,32 @@
+# Build
+target/
+build/
+dist/
+*.class
+*.jar
+# IDE
+.idea
+*.iml
+.vscode
+.settings
+.classpath
+.project
+*.swp
+*~
+
+# Logs
+logs/
+*.log
+
+# Runtime
+.minecraft/
+launcher_profiles.json
+launcher_settings.json
+launcher_accounts.json
+.history
+.agent
+.
+
+# OS
+.DS_Store
+Thumbs.db
