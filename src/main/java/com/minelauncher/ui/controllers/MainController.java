@@ -336,24 +336,19 @@ public class MainController implements Initializable {
     }
 
     private void setupModListContextMenu() {
-        javafx.scene.control.ContextMenu contextMenu = new javafx.scene.control.ContextMenu();
+        javafx.scene.control.MenuItem installItem =
+                com.minelauncher.ui.utils.JavaFxContextMenus.item("Instalar", this::installSelected);
+        javafx.scene.control.MenuItem removeItem =
+                com.minelauncher.ui.utils.JavaFxContextMenus.item("Remover", this::removeSelected);
+        javafx.scene.control.MenuItem backupItem =
+                com.minelauncher.ui.utils.JavaFxContextMenus.item("Backup save", this::backupWorld);
+        javafx.scene.control.MenuItem openFolderItem =
+                com.minelauncher.ui.utils.JavaFxContextMenus.item("Abrir pasta", this::openItemFolder);
+        javafx.scene.control.MenuItem openScreenshot =
+                com.minelauncher.ui.utils.JavaFxContextMenus.item("Abrir screenshot", this::openSelectedScreenshot);
 
-        javafx.scene.control.MenuItem installItem = new javafx.scene.control.MenuItem("Instalar");
-        installItem.setOnAction(e -> installSelected());
-
-        javafx.scene.control.MenuItem removeItem = new javafx.scene.control.MenuItem("Remover");
-        removeItem.setOnAction(e -> removeSelected());
-
-        javafx.scene.control.MenuItem backupItem = new javafx.scene.control.MenuItem("Backup save");
-        backupItem.setOnAction(e -> backupWorld());
-
-        javafx.scene.control.MenuItem openFolderItem = new javafx.scene.control.MenuItem("Abrir pasta");
-        openFolderItem.setOnAction(e -> openItemFolder());
-
-        javafx.scene.control.MenuItem openScreenshot = new javafx.scene.control.MenuItem("Abrir screenshot");
-        openScreenshot.setOnAction(e -> openSelectedScreenshot());
-
-        contextMenu.getItems().addAll(installItem, removeItem, backupItem, openFolderItem, openScreenshot);
+        javafx.scene.control.ContextMenu contextMenu = com.minelauncher.ui.utils.JavaFxContextMenus.menu(
+                installItem, removeItem, backupItem, openFolderItem, openScreenshot);
 
         modList.setContextMenu(contextMenu);
 
@@ -378,32 +373,11 @@ public class MainController implements Initializable {
     }
 
     private void setupRamField(TextField field, int min, int max, int def) {
-        field.setText(String.valueOf(def));
-        field.textProperty().addListener((obs, old, val) -> {
-            if (!val.matches("\\d*")) {
-                field.setText(val.replaceAll("\\D", ""));
-            }
-            if (!field.getText().isEmpty()) {
-                int v = Integer.parseInt(field.getText());
-                if (v < min)
-                    field.setText(String.valueOf(min));
-                if (v > max)
-                    field.setText(String.valueOf(max));
-            }
-        });
-        field.focusedProperty().addListener((obs, was, is) -> {
-            if (!is && field.getText().isEmpty()) {
-                field.setText(String.valueOf(def));
-            }
-        });
+        com.minelauncher.ui.utils.JavaFxContextMenus.setupRamField(field, min, max, def);
     }
 
     private int parseRam(TextField field) {
-        try {
-            return Integer.parseInt(field.getText().trim());
-        } catch (NumberFormatException e) {
-            return 2048;
-        }
+        return com.minelauncher.ui.utils.JavaFxContextMenus.parseRam(field, 2048);
     }
 
     private void openItemFolder() {
