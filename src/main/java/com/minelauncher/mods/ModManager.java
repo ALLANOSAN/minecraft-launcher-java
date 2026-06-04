@@ -173,7 +173,16 @@ public class ModManager {
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
-            JsonObject json = JsonParser.parseString(response.body().string()).getAsJsonObject();
+            String body = response.body().string();
+            if (!response.isSuccessful()) {
+                LOG.error("Falha na API CurseForge: {} - Body: {}", response.code(), body);
+                throw new IOException("Falha na API CurseForge: " + response.code());
+            }
+            
+            // Logar para debug se o JSON for malformado
+            com.google.gson.stream.JsonReader reader = new com.google.gson.stream.JsonReader(new java.io.StringReader(body));
+            reader.setLenient(true);
+            JsonObject json = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
             JsonArray data = json.getAsJsonArray("data");
 
             List<ModInfo> mods = new ArrayList<>();

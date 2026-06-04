@@ -59,7 +59,7 @@ public class SettingsManager {
         accountsFile = new File(baseDir, "launcher_accounts.json");
         
         this.configLoader = new com.minelauncher.utils.ConfigLoader(baseDir.getAbsolutePath());
-        this.curseForgeProxyUrl = configLoader.getProperty("curseforge.proxy.url", "https://minelauncher-proxy.vercel.app/api/cf");
+        this.curseForgeProxyUrl = configLoader.getProperty("curseforge.proxy.url", "https://minecraft-launcher-java.vercel.app/api/cf");
         this.modrinthApiUrl = configLoader.getProperty("modrinth.api.url", "https://api.modrinth.com/v2");
 
         LOG.info("Diretório base: {}", baseDir.getAbsolutePath());
@@ -80,7 +80,7 @@ public class SettingsManager {
                     showSnapshots = data.showSnapshots;
                     downloadThreads = data.downloadThreads > 0 ? data.downloadThreads : 8;
                     language = data.language != null ? data.language : "pt_BR";
-                    curseForgeProxyUrl = data.curseForgeProxyUrl != null && !data.curseForgeProxyUrl.isBlank() ? data.curseForgeProxyUrl : "https://minelauncher-proxy.vercel.app/api/cf";
+                    curseForgeProxyUrl = data.curseForgeProxyUrl != null && !data.curseForgeProxyUrl.isBlank() ? data.curseForgeProxyUrl : "https://minecraft-launcher-java.vercel.app/api/cf";
                     modrinthApiUrl = data.modrinthApiUrl != null && !data.modrinthApiUrl.isBlank() ? data.modrinthApiUrl : "https://api.modrinth.com/v2";
                 }
             } catch (Exception e) {
