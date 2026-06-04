@@ -323,7 +323,8 @@ public class ModActions {
         // 1) Lista subdiretórios de modpacks/ (modpacks reais baixados)
         if (modpacksDir.exists() && modpacksDir.listFiles() != null) {
             for (File dir : modpacksDir.listFiles(File::isDirectory)) {
-                String displayName = resolveModpackDisplayName(dir);
+                String displayName = com.minelauncher.utils.ModpackNameResolver.resolve(
+                        dir, profileManager != null ? profileManager.getProfiles() : null);
                 boolean dirExists = true;
                 controller.getModList().getItems().add("[Modpack] " + displayName
                         + (dirExists ? "" : "  (sem pasta)"));
@@ -360,58 +361,16 @@ public class ModActions {
 
     /**
      * Resolve o melhor nome "humano" para um diretório de modpack.
-     * Ordem de prioridade:
-     *   1. launcher_manifest.json → campo "name" (formato do MineLauncher)
-     *   2. manifest.json → campo "name" (formato CurseForge)
-     *   3. Perfil cujo gameDir aponta para este diretório
-     *   4. Nome do diretório (fallback, pode ser UUID/legível)
+     * Movido para {@link com.minelauncher.utils.ModpackNameResolver} (H-2).
      */
     private String resolveModpackDisplayName(File modpackDir) {
-        String dirName = modpackDir.getName();
-        String canonical = modpackDir.getAbsolutePath();
-
-        String[] manifestFiles = { "launcher_manifest.json", "manifest.json" };
-        for (String mf : manifestFiles) {
-            File manifest = new File(modpackDir, mf);
-            if (!manifest.exists()) continue;
-            try {
-                String json = java.nio.file.Files.readString(manifest.toPath());
-                com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
-                if (obj.has("name")) {
-                    String n = obj.get("name").getAsString();
-                    if (n != null && !n.isBlank() && !looksLikeGarbage(n)) {
-                        return n;
-                    }
-                }
-            } catch (Exception e) {
-                LOG.debug("Erro ao ler manifesto {}: {}", manifest.getName(), e.getMessage());
-            }
-        }
-
-        // Fallback: nome do diretório é um UUID/lixo? Tenta encontrar o perfil cujo gameDir bate
-        if (looksLikeGarbage(dirName) && profileManager != null) {
-            for (LaunchProfile p : profileManager.getProfiles()) {
-                String gd = p.getGameDir();
-                if (gd == null) continue;
-                if (new File(gd).getAbsolutePath().equals(canonical) && p.getName() != null && !p.getName().isBlank()) {
-                    return p.getName();
-                }
-            }
-        }
-
-        return dirName;
+        return com.minelauncher.utils.ModpackNameResolver.resolve(
+                modpackDir, profileManager != null ? profileManager.getProfiles() : null);
     }
 
     /** Heurística: nomes com formato UUID ou só hex/dígitos com hífens são "lixo" pro display */
     private static boolean looksLikeGarbage(String s) {
-        if (s == null) return true;
-        String t = s.trim();
-        if (t.isEmpty()) return true;
-        // UUID 8-4-4-4-12
-        if (t.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")) return true;
-        // só dígitos e hífens (parece hash)
-        if (t.matches("^[0-9a-fA-F-]{20,}$")) return true;
-        return false;
+        return com.minelauncher.utils.ModpackNameResolver.looksLikeGarbage(s);
     }
 
     public void checkUpdates() {

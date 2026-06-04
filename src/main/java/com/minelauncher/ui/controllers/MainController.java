@@ -993,7 +993,7 @@ public class MainController implements Initializable {
         } else {
             statusNetLabel.setText(netOnline ? "ONLINE" : "OFFLINE");
         }
-        swapClass(statusNetLabel, STATUS_VARIANTS, netOnline ? "status-text-accent" : "status-text-danger");
+        com.minelauncher.ui.utils.JavaFxUtils.swapClass(statusNetLabel, STATUS_VARIANTS, netOnline ? "status-text-accent" : "status-text-danger");
     }
 
     // ==================== STATE MACHINE ====================
@@ -1022,7 +1022,7 @@ public class MainController implements Initializable {
                 styleClass = "session-chip-accent";
         }
         sessionStatusLabel.setText(text);
-        swapClass(sessionStatusLabel, SESSION_VARIANTS, styleClass);
+        com.minelauncher.ui.utils.JavaFxUtils.swapClass(sessionStatusLabel, SESSION_VARIANTS, styleClass);
     }
 
     public void setBusy() {
@@ -1042,15 +1042,6 @@ public class MainController implements Initializable {
     }
 
     // ==================== UTILS ====================
-
-    private void swapClass(Label l, java.util.List<String> variants, String target) {
-        if (l == null)
-            return;
-        l.getStyleClass().removeAll(variants);
-        if (target != null && !l.getStyleClass().contains(target)) {
-            l.getStyleClass().add(target);
-        }
-    }
 
     public void stopLiveUpdates() {
         if (statusBarUpdater != null) {
