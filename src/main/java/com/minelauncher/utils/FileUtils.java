@@ -26,16 +26,25 @@ public final class FileUtils {
 
     /**
      * Formata bytes em string legível (B/KB/MB/GB).
+     *
+     * <p>FIX locale: usa {@link java.util.Locale#ROOT} explicitamente para o
+     * separador decimal. Antes usava o locale default da JVM, então em PT-BR
+     * mostrava "1,5 MB" em vez de "1.5 MB" — inconsistente com o resto da UI
+     * e quebrando os testes em qualquer locale não-EN.
      */
     public static String formatBytes(long bytes) {
         if (bytes < KB) return bytes + " B";
-        if (bytes < MB) return String.format("%.1f KB", bytes / (double) KB);
+        if (bytes < MB) return String.format(java.util.Locale.ROOT, "%.1f KB", bytes / (double) KB);
         if (bytes < GB) {
             double mb = bytes / (double) MB;
-            return (mb < 10 ? String.format("%.1f", mb) : String.format("%.0f", mb)) + " MB";
+            return (mb < 10
+                    ? String.format(java.util.Locale.ROOT, "%.1f", mb)
+                    : String.format(java.util.Locale.ROOT, "%.0f", mb)) + " MB";
         }
         double gb = bytes / (double) GB;
-        return (gb < 10 ? String.format("%.2f", gb) : String.format("%.1f", gb)) + " GB";
+        return (gb < 10
+                ? String.format(java.util.Locale.ROOT, "%.2f", gb)
+                : String.format(java.util.Locale.ROOT, "%.1f", gb)) + " GB";
     }
 
     /**
