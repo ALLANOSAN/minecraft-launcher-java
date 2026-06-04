@@ -11,7 +11,7 @@
 
 // FORÇA runtime Node.js (evita cair no Edge runtime, que tem APIs diferentes)
 export const config = {
-  runtime: 'nodejs18.x',
+  runtime: 'nodejs',
 };
 
 const CF_BASE = 'https://api.curseforge.com/v1';
