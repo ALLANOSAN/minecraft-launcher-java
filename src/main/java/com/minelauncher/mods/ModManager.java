@@ -167,12 +167,14 @@ public class ModManager {
                 "&pageSize=" + limit +
                 "&sortField=Popularity&sortOrder=desc";
 
+        LOG.info("Tentando requisição para CurseForge: {}", url);
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "MineLauncher/1.0")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
+            LOG.info("Resposta recebida de {}: status={}", url, response.code());
             String body = response.body().string();
             if (!response.isSuccessful()) {
                 LOG.error("Falha na API CurseForge: {} - Body: {}", response.code(), body);
