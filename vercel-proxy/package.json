@@ -1,0 +1,9 @@
+{
+  "name": "minelauncher-curseforge-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vercel serverless proxy que injeta a chave da API CurseForge para o MineLauncher desktop.",
+  "engines": {
+    "node": ">=18"
+  }
+}

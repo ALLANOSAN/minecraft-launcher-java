@@ -21,9 +21,20 @@ public class ModManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(ModManager.class);
     private static final String MODRINTH_API = "https://api.modrinth.com/v2";
-    private static final String CURSEFORGE_API = "https://api.curseforge.com/v1";
-    private static final String CURSEFORGE_KEY = System.getenv().getOrDefault("CURSEFORGE_API_KEY",
-            "$2a$10$u6IaFQa5QxLTfo340o0C3OPrKUA.9hdYyn5HwyFqEuoJIQ2Wp1zDq");
+    // O launcher fala com CurseForge através deste proxy. A chave real fica
+    // server-side na Vercel (env var CURSEFORGE_API_KEY) e NUNCA é embarcada
+    // no JAR. Para usar outro proxy, defina CURSEFORGE_PROXY_URL na env.
+    // Veja vercel-proxy/README.md para detalhes do deploy.
+    private static final String CURSEFORGE_PROXY_URL = resolveCurseForgeProxyUrl();
+
+    private static String resolveCurseForgeProxyUrl() {
+        String env = System.getenv("CURSEFORGE_PROXY_URL");
+        if (env != null && !env.isBlank()) {
+            return env.trim();
+        }
+        // Substitua pelo domínio real do seu deploy na Vercel
+        return "https://minelauncher-proxy.vercel.app/api/cf";
+    }
 
     // Cache de API com TTL de 5 minutos
     private static final long CACHE_TTL_MS = 5 * 60 * 1000;
@@ -152,7 +163,7 @@ public class ModManager {
         List<ModInfo> cached = getCached(cacheKey, List.class);
         if (cached != null) return cached;
 
-        String url = CURSEFORGE_API + "/mods/search?gameId=" + gameId +
+        String url = CURSEFORGE_PROXY_URL + "/mods/search?gameId=" + gameId +
                 "&classId=" + classId +
                 "&searchFilter=" + query;
         if (gameVersion != null && !gameVersion.isEmpty()) {
@@ -164,7 +175,7 @@ public class ModManager {
 
         Request request = new Request.Builder()
                 .url(url)
-                .header("x-api-key", CURSEFORGE_KEY)
+                .header("User-Agent", "MineLauncher/1.0")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -193,11 +204,11 @@ public class ModManager {
      * Obtém arquivos de um mod do CurseForge
      */
     public JsonArray getCurseForgeFiles(int modId, String gameVersion) throws IOException {
-        String url = CURSEFORGE_API + "/mods/" + modId + "/files?gameVersion=" + gameVersion + "&pageSize=20";
+        String url = CURSEFORGE_PROXY_URL + "/mods/" + modId + "/files?gameVersion=" + gameVersion + "&pageSize=20";
 
         Request request = new Request.Builder()
                 .url(url)
-                .header("x-api-key", CURSEFORGE_KEY)
+                .header("User-Agent", "MineLauncher/1.0")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -505,11 +516,11 @@ public class ModManager {
 
             pool.submit(() -> {
                 try {
-                    // Buscar informações do arquivo via API
-                    String apiUrl = CURSEFORGE_API + "/mods/" + projectID + "/files/" + fileID;
+                    // Buscar informações do arquivo via API (proxy)
+                    String apiUrl = CURSEFORGE_PROXY_URL + "/mods/" + projectID + "/files/" + fileID;
                     Request request = new Request.Builder()
                             .url(apiUrl)
-                            .header("x-api-key", CURSEFORGE_KEY)
+                            .header("User-Agent", "MineLauncher/1.0")
                             .build();
 
                     String fileUrl = null;

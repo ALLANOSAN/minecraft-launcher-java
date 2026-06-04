@@ -30,3 +30,8 @@ launcher_accounts.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Vercel (proxy em vercel-proxy/)
+vercel-proxy/node_modules/
+vercel-proxy/.vercel/
+vercel-proxy/.env
