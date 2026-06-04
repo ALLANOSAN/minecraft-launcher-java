@@ -409,13 +409,7 @@ public class MainController implements Initializable {
 
         new Thread(() -> {
             try {
-                if (targetDir.exists()) {
-                    if (java.awt.Desktop.isDesktopSupported()) {
-                        java.awt.Desktop.getDesktop().open(targetDir);
-                    } else {
-                        new ProcessBuilder("xdg-open", targetDir.getAbsolutePath()).start();
-                    }
-                }
+                com.minelauncher.ui.utils.DesktopUtil.open(targetDir);
             } catch (Exception e) {
                 Platform.runLater(() -> statusLabel.setText("Erro ao abrir pasta: " + e.getMessage()));
             }
@@ -440,16 +434,10 @@ public class MainController implements Initializable {
 
         String fileName = selected.replace("[Screenshot] ", "").split(" - ")[0].trim();
         File screenshot = new File(gameDir, "screenshots/" + fileName);
-        
+
         new Thread(() -> {
             try {
-                if (screenshot.exists()) {
-                    if (java.awt.Desktop.isDesktopSupported()) {
-                        java.awt.Desktop.getDesktop().open(screenshot);
-                    } else {
-                        new ProcessBuilder("xdg-open", screenshot.getAbsolutePath()).start();
-                    }
-                }
+                com.minelauncher.ui.utils.DesktopUtil.open(screenshot);
             } catch (Exception e) {
                 Platform.runLater(() -> statusLabel.setText("Erro ao abrir screenshot: " + e.getMessage()));
             }
