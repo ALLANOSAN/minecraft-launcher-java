@@ -9,11 +9,15 @@
 //   GET  /api/cf/_health       -> { ok, version, hasKey }
 //   ANY  /api/cf/<path>        -> forward pra https://api.curseforge.com/v1/<path>
 
+// FORÇA runtime Node.js (evita cair no Edge runtime, que tem APIs diferentes)
+export const config = {
+  runtime: 'nodejs18.x',
+};
+
 const CF_BASE = 'https://api.curseforge.com/v1';
 const VERSION = '1.0.0';
 
 // =============== Rate limit por IP ===============
-// CurseForge permite ~300 req/min por chave. 180/min por IP dá margem.
 const RL_WINDOW_MS = 60_000;
 const RL_MAX = 180;
 const buckets = new Map();
@@ -33,7 +37,6 @@ function rateLimit(ip) {
   return { ok: true };
 }
 
-// Limpa buckets expirados a cada 5 min pra não vazar memória
 let lastCleanup = Date.now();
 function maybeCleanup() {
   if (Date.now() - lastCleanup < 5 * 60_000) return;
@@ -45,108 +48,129 @@ function maybeCleanup() {
 }
 
 function clientIp(req) {
-  const xff = req.headers['x-forwarded-for'];
-  if (xff) return xff.split(',')[0].trim();
-  return req.headers['x-real-ip'] || req.socket?.remoteAddress || 'unknown';
+  try {
+    const xff = req.headers && req.headers['x-forwarded-for'];
+    if (xff) return String(xff).split(',')[0].trim();
+    if (req.headers && req.headers['x-real-ip']) return req.headers['x-real-ip'];
+    if (req.socket && req.socket.remoteAddress) return req.socket.remoteAddress;
+  } catch (_) { /* fallthrough */ }
+  return 'unknown';
 }
 
-// =============== CORS ===============
 function applyCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, User-Agent');
-  res.setHeader('Access-Control-Max-Age', '86400');
+  try {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, User-Agent');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  } catch (_) { /* some responses (e.g. Edge) don't allow setHeader early */ }
 }
 
 // =============== Handler principal ===============
 export default async function handler(req, res) {
-  applyCors();
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-
-  const ip = clientIp(req);
-  maybeCleanup();
-
-  // Health check — não toca upstream, não conta no rate limit
-  const pathStr = Array.isArray(req.query.path)
-    ? req.query.path.join('/')
-    : (req.query.path || '');
-  if (pathStr === '_health' || pathStr === '_ping') {
-    const hasKey = !!process.env.CURSEFORGE_API_KEY;
-    return res.status(hasKey ? 200 : 503).json({
-      ok: hasKey,
-      version: VERSION,
-      hasKey,
-    });
-  }
-
-  // Rate limit
-  const rl = rateLimit(ip);
-  if (!rl.ok) {
-    res.setHeader('Retry-After', String(rl.retryAfter));
-    return res.status(429).json({
-      error: 'rate_limited',
-      retry_after_s: rl.retryAfter,
-    });
-  }
-
-  // Validação da env var
-  const apiKey = process.env.CURSEFORGE_API_KEY;
-  if (!apiKey) {
-    console.error('[cf-proxy] misconfigured: CURSEFORGE_API_KEY missing');
-    return res.status(500).json({ error: 'proxy_misconfigured' });
-  }
-
-  // Constrói URL alvo preservando path + querystring do cliente
-  // req.url = "/api/cf/mods/123?gameId=432"
-  // tail    = "/mods/123?gameId=432"
-  const tail = req.url.replace(/^\/api\/cf/, '') || '/';
-  const targetUrl = `${CF_BASE}${tail}`;
-
-  // Headers: bloqueia auth do cliente, injeta key server-side
-  const fwdHeaders = {
-    'x-api-key': apiKey,
-    'Accept': req.headers['accept'] || 'application/json',
-    // Passa o User-Agent do cliente (ex: "MineLauncher/1.0") se vier,
-    // senão identifica o proxy. CurseForge prefere app identificado.
-    'User-Agent': req.headers['user-agent'] || `MineLauncher-Proxy/${VERSION}`,
-  };
-  if (req.headers['content-type']) {
-    fwdHeaders['Content-Type'] = req.headers['content-type'];
-  }
-
-  // Body só em métodos com payload
-  const fetchOpts = { method: req.method, headers: fwdHeaders };
-  if (!['GET', 'HEAD'].includes(req.method) && req.body != null) {
-    fetchOpts.body = typeof req.body === 'string'
-      ? req.body
-      : JSON.stringify(req.body);
-  }
-
-  // Forward
-  const start = Date.now();
   try {
-    const upstream = await fetch(targetUrl, fetchOpts);
+    applyCors();
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
+    // Defensivo: req.query pode ser undefined em alguns runtimes
+    const query = (req && req.query) || {};
+    const pathRaw = query.path;
+    const pathStr = Array.isArray(pathRaw)
+      ? pathRaw.join('/')
+      : (typeof pathRaw === 'string' ? pathRaw : '');
+
+    // Health check — não toca upstream, não conta no rate limit
+    if (pathStr === '_health' || pathStr === '_ping') {
+      const hasKey = !!process.env.CURSEFORGE_API_KEY;
+      return res.status(hasKey ? 200 : 503).json({
+        ok: hasKey,
+        version: VERSION,
+        hasKey,
+      });
+    }
+
+    const ip = clientIp(req);
+    maybeCleanup();
+
+    // Rate limit
+    const rl = rateLimit(ip);
+    if (!rl.ok) {
+      res.setHeader('Retry-After', String(rl.retryAfter));
+      return res.status(429).json({
+        error: 'rate_limited',
+        retry_after_s: rl.retryAfter,
+      });
+    }
+
+    // Validação da env var
+    const apiKey = process.env.CURSEFORGE_API_KEY;
+    if (!apiKey) {
+      console.error('[cf-proxy] misconfigured: CURSEFORGE_API_KEY missing');
+      return res.status(500).json({ error: 'proxy_misconfigured' });
+    }
+
+    // Constrói URL alvo preservando path + querystring do cliente
+    // req.url = "/api/cf/mods/123?gameId=432"
+    // tail    = "/mods/123?gameId=432"
+    const reqUrl = (req && req.url) ? String(req.url) : '/';
+    const tail = reqUrl.replace(/^\/api\/cf/, '') || '/';
+    const targetUrl = `${CF_BASE}${tail}`;
+
+    // Headers: bloqueia auth do cliente, injeta key server-side
+    const headers = req.headers || {};
+    const fwdHeaders = {
+      'x-api-key': apiKey,
+      'Accept': headers['accept'] || 'application/json',
+      // Passa o User-Agent do cliente (ex: "MineLauncher/1.0") se vier,
+      // senão identifica o proxy. CurseForge prefere app identificado.
+      'User-Agent': headers['user-agent'] || `MineLauncher-Proxy/${VERSION}`,
+    };
+    if (headers['content-type']) {
+      fwdHeaders['Content-Type'] = headers['content-type'];
+    }
+
+    // Body só em métodos com payload
+    const fetchOpts = { method: req.method || 'GET', headers: fwdHeaders };
+    if (!['GET', 'HEAD'].includes(req.method) && req.body != null) {
+      fetchOpts.body = typeof req.body === 'string'
+        ? req.body
+        : JSON.stringify(req.body);
+    }
+
+    // Forward
+    const start = Date.now();
+    let upstream;
+    try {
+      upstream = await fetch(targetUrl, fetchOpts);
+    } catch (fetchErr) {
+      console.error(`[cf-proxy] fetch failed: ${fetchErr.message} url=${targetUrl}`);
+      return res.status(502).json({ error: 'upstream_unreachable', message: fetchErr.message });
+    }
+
     const body = await upstream.text();
     const elapsed = Date.now() - start;
 
     // Log: método, path, status, latência, IP. NÃO loga body nem headers.
-    console.log(
-      `[cf-proxy] ${req.method} /${pathStr} -> ${upstream.status} (${elapsed}ms) ip=${ip}`
-    );
+    console.log(`[cf-proxy] ${req.method} /${pathStr} -> ${upstream.status} (${elapsed}ms) ip=${ip}`);
 
     res.status(upstream.status);
-    res.setHeader('Content-Type',
-      upstream.headers.get('content-type') || 'application/json');
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
     res.setHeader('X-Proxy-Latency-Ms', String(elapsed));
     return res.send(body);
+
   } catch (err) {
-    console.error(`[cf-proxy] upstream error: ${err.message} url=${targetUrl}`);
-    return res.status(502).json({
-      error: 'upstream_error',
-      message: err.message,
-    });
+    // Última linha de defesa: loga o erro real e retorna 500 com mensagem
+    console.error(`[cf-proxy] FATAL: ${err && err.stack ? err.stack : err}`);
+    try {
+      return res.status(500).json({
+        error: 'internal_error',
+        message: (err && err.message) ? err.message : String(err),
+      });
+    } catch (_) {
+      // res já foi enviado; não tem o que fazer
+    }
   }
 }
