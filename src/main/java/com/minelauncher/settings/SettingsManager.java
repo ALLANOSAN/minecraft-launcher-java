@@ -2,7 +2,12 @@ package com.minelauncher.settings;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
 import com.minelauncher.models.GameProfile;
+import com.minelauncher.utils.SecretCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,8 +15,6 @@ import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.util.*;
-
-import com.google.gson.reflect.TypeToken;
 
 public class SettingsManager {
 
@@ -81,13 +84,20 @@ public class SettingsManager {
             try {
                 String json = Files.readString(accountsFile.toPath());
                 List<GameProfile> loaded = GSON.fromJson(json, ACCOUNTS_TYPE);
-                if (loaded != null) accounts = loaded;
+                if (loaded != null) {
+                    // FIX C-3: decifra tokens que estejam no formato "enc:..."
+                    // Plain text legado é retornado como está (migração transparente)
+                    for (GameProfile profile : loaded) {
+                        decryptInPlace(profile);
+                    }
+                    accounts = loaded;
+                }
             } catch (Exception e) {
                 LOG.error("Erro ao carregar contas", e);
             }
         }
 
-        LOG.info("Configurações carregadas");
+        LOG.info("Configurações carregadas ({} conta(s))", accounts.size());
     }
 
     public synchronized void save() {
@@ -102,14 +112,55 @@ public class SettingsManager {
             data.language = language;
             Files.writeString(settingsFile.toPath(), GSON.toJson(data));
 
-            // Salvar contas
-            Files.writeString(accountsFile.toPath(), GSON.toJson(accounts));
+            // FIX C-3: cifrar tokens antes de serializar contas.
+            // Itera sobre uma cópia pra não mutar a lista em memória do usuário.
+            // O arquivo em disco fica ilegível sem o SecretCodec.
+            List<GameProfile> toPersist = new ArrayList<>(accounts.size());
+            for (GameProfile profile : accounts) {
+                toPersist.add(encryptedCopy(profile));
+            }
+            Files.writeString(accountsFile.toPath(), GSON.toJson(toPersist));
         } catch (IOException e) {
             LOG.error("Erro ao salvar configurações", e);
         }
     }
 
-    // Getters e Setters
+    // =============== Token cipher helpers (FIX C-3) ===============
+
+    /**
+     * Cifra os tokens de um profile in-place e retorna o mesmo objeto.
+     * Usado antes de serializar para JSON.
+     */
+    private static GameProfile encryptedCopy(GameProfile src) {
+        if (src == null) return null;
+        GameProfile copy = new GameProfile();
+        copy.setName(src.getName());
+        copy.setUuid(src.getUuid());
+        copy.setMicrosoft(src.isMicrosoft());
+        copy.setOffline(src.isOffline());
+        copy.setTokenExpiry(src.getTokenExpiry());
+        copy.setAccessToken(encryptField(src.getAccessToken()));
+        copy.setRefreshToken(encryptField(src.getRefreshToken()));
+        copy.setXblToken(encryptField(src.getXblToken()));
+        copy.setXstsToken(encryptField(src.getXstsToken()));
+        return copy;
+    }
+
+    private static void decryptInPlace(GameProfile profile) {
+        if (profile == null) return;
+        profile.setAccessToken(SecretCodec.decrypt(profile.getAccessToken()));
+        profile.setRefreshToken(SecretCodec.decrypt(profile.getRefreshToken()));
+        profile.setXblToken(SecretCodec.decrypt(profile.getXblToken()));
+        profile.setXstsToken(SecretCodec.decrypt(profile.getXstsToken()));
+    }
+
+    private static String encryptField(String value) {
+        if (value == null || value.isEmpty()) return value;
+        return "enc:" + SecretCodec.encrypt(value);
+    }
+
+    // =============== Getters / Setters ===============
+
     public File getBaseDir() { return baseDir; }
     public String getSelectedAccountUuid() { return selectedAccountUuid; }
     public void setSelectedAccountUuid(String uuid) { this.selectedAccountUuid = uuid; save(); }

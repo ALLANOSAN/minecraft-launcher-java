@@ -504,8 +504,13 @@ public class ModManager {
         java.util.concurrent.atomic.AtomicInteger failed = new java.util.concurrent.atomic.AtomicInteger(0);
         LOG.info("Baixando {} mods do modpack CurseForge (paralelo)...", total);
 
-        // Pool de threads configurável (padrão 8)
-        int threadCount = 8;
+        // FIX H-8: usa threads configuradas pelo usuário em Configurações
+        // (padrão 8). Antes era hardcoded; usuários com banda baixa ficavam
+        // saturando conexão e usuários com SSD/1Gbps ficavam subutilizados.
+        int threadCount = com.minelauncher.settings.SettingsManager.getInstance().getDownloadThreads();
+        if (threadCount <= 0 || threadCount > 32) {
+            threadCount = 8;
+        }
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(total);
 
@@ -905,7 +910,12 @@ public class ModManager {
                         LOG.info("Modpack removido: {}", modpackName);
                         return;
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    // FIX C-10: substitui catch silencioso por log estruturado.
+                    // Antes erros de parse de manifest.json eram invisíveis e
+                    // mascaravam mods corrompidos / incompatíveis.
+                    LOG.debug("Não foi possível ler manifesto de {}", dir.getName(), e);
+                }
             }
         }
     }

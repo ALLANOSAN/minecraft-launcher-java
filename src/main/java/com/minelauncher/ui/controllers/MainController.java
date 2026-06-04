@@ -205,6 +205,9 @@ public class MainController implements Initializable {
     private long lastRamUpdateNs = 0;
     private long lastNetUpdateNs = 0;
     private int clockTickCounter = 0;
+    // FIX H-9: previne múltiplas threads de net-check se a chamada for feita várias
+    // vezes dentro do mesmo tick. Garante que sempre há no máximo 1 net-check em vôo.
+    private final java.util.concurrent.atomic.AtomicBoolean netCheckRunning = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     // Fuso horário fixo do Brasil — não depende do default da JVM
     private static final java.time.ZoneId BRAZIL_ZONE = java.time.ZoneId.of("America/Sao_Paulo");
@@ -1010,12 +1013,11 @@ public class MainController implements Initializable {
         }
     }
 
+    // FIX C-7: debugLog reescrito para usar SLF4J em vez de FileWriter em
+    // /tmp/launcher-clock.log. O método antigo causava I/O síncrono a cada tick
+    // do AnimationTimer (60 fps) e falhava silenciosamente em Windows/paths imutáveis.
     private static void debugLog(String msg) {
-        try (java.io.FileWriter fw = new java.io.FileWriter(
-                "/tmp/launcher-clock.log", true)) {
-            fw.write("[" + java.time.LocalDateTime.now() + "] " + msg + "\n");
-        } catch (java.io.IOException ignored) {
-        }
+        LOG.debug(msg);
     }
 
     private void updateRam() {
@@ -1034,11 +1036,22 @@ public class MainController implements Initializable {
     }
 
     private void checkNetAsync() {
-        new Thread(() -> {
-            boolean ok = pingMojang();
-            netOnline = ok;
-            Platform.runLater(this::renderNetLabel);
-        }, "net-check").start();
+        // FIX H-9: usa AtomicBoolean para evitar acúmulo de threads se a função
+        // for chamada várias vezes em rajada (ex: usuário troca de tab rapidamente).
+        if (!netCheckRunning.compareAndSet(false, true)) {
+            return;
+        }
+        Thread t = new Thread(() -> {
+            try {
+                boolean ok = pingMojang();
+                netOnline = ok;
+                Platform.runLater(this::renderNetLabel);
+            } finally {
+                netCheckRunning.set(false);
+            }
+        }, "net-check");
+        t.setDaemon(true);
+        t.start();
     }
 
     private boolean pingMojang() {
@@ -1443,7 +1456,7 @@ public class MainController implements Initializable {
                 });
 
                 // Aguardar fim do jogo
-                new Thread(() -> {
+                Thread watcher = new Thread(() -> {
                     try {
                         while (gameLauncher.isRunning()) {
                             Thread.sleep(1000);
@@ -1458,7 +1471,12 @@ public class MainController implements Initializable {
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
-                }).start();
+                }, "game-watcher");
+                // FIX C-9: setDaemon(true) impede que essa thread impeça o shutdown
+                // da JVM. Antes era um thread "user" e em logout/logout rápido a
+                // aplicação ficava pendurada esperando o game launcher reportar.
+                watcher.setDaemon(true);
+                watcher.start();
 
             } catch (Exception e) {
                 Platform.runLater(() -> {

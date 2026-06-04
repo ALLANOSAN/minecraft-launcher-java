@@ -1,6 +1,7 @@
 package com.minelauncher.auth;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.minelauncher.models.GameProfile;
@@ -34,9 +35,6 @@ public class MicrosoftAuth {
                 .build();
     }
 
-    /**
-     * Resposta do pedido de Device Code
-     */
     public record DeviceCodeResponse(
             String user_code,
             String verification_uri,
@@ -61,40 +59,46 @@ public class MicrosoftAuth {
 
                 // 3. Autenticar no Xbox Live (XBL)
                 JsonObject xblResponse = authenticateXBL(msAccessToken);
-                String xblToken = xblResponse.get("Token").getAsString();
-                String xblUserHash = xblResponse.getAsJsonObject("DisplayClaims")
-                        .getAsJsonArray("xui").get(0).getAsJsonObject().get("uhs").getAsString();
+                String xblToken = getStringOrThrow(xblResponse, "Token", "XBL");
+                String xblUserHash = extractUhsFromXbl(xblResponse);
 
                 // 4. Autenticar no XSTS
                 JsonObject xstsResponse = authenticateXSTS(xblToken);
-                String xstsToken = xstsResponse.get("Token").getAsString();
+                String xstsToken = getStringOrThrow(xstsResponse, "Token", "XSTS");
 
                 // 5. Obter Minecraft Access Token
                 String mcAccessToken = getMinecraftToken(xblUserHash, xstsToken);
 
                 // 6. Buscar Perfil Minecraft
                 JsonObject profile = getMinecraftProfile(mcAccessToken);
-                String name = profile.get("name").getAsString();
-                String id = profile.get("id").getAsString();
+                String name = getStringOrThrow(profile, "name", "MinecraftProfile");
+                String id = getStringOrThrow(profile, "id", "MinecraftProfile");
                 UUID uuid = UUID.fromString(id.replaceFirst(
                         "(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5"));
 
                 GameProfile gameProfile = new GameProfile(name, uuid, false);
                 gameProfile.setAccessToken(mcAccessToken);
-                
+
                 LOG.info("Login Microsoft concluído: {}", name);
                 return gameProfile;
 
+            } catch (InterruptedException e) {
+                // Restaura flag de interrupção e propaga como exceção checked-friendly
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Login Microsoft interrompido", e);
             } catch (Exception e) {
+                // FIX C-6: preserva stack trace original via 'cause' (antes era
+                // 'throw new RuntimeException(e.getMessage())' que perdia a stack)
                 LOG.error("Falha no login Microsoft", e);
-                throw new RuntimeException(e.getMessage());
+                throw new RuntimeException(
+                        e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(), e);
             }
         });
     }
 
     private DeviceCodeResponse requestDeviceCode() throws IOException, InterruptedException {
         String body = "client_id=" + CLIENT_ID + "&scope=" + SCOPE;
-        
+
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
@@ -102,15 +106,17 @@ public class MicrosoftAuth {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new IOException("Erro ao pedir device code: " + response.body());
-        
+        if (response.statusCode() != 200) {
+            throw new IOException("Erro ao pedir device code (HTTP " + response.statusCode() + "): " + response.body());
+        }
+
         JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
         return new DeviceCodeResponse(
-                json.get("user_code").getAsString(),
-                json.get("verification_uri").getAsString(),
-                json.get("device_code").getAsString(),
-                json.get("interval").getAsInt(),
-                json.get("expires_in").getAsInt()
+                getStringOrThrow(json, "user_code", "DeviceCode"),
+                getStringOrThrow(json, "verification_uri", "DeviceCode"),
+                getStringOrThrow(json, "device_code", "DeviceCode"),
+                getIntOrDefault(json, "interval", 5),
+                getIntOrDefault(json, "expires_in", 900)
         );
     }
 
@@ -122,6 +128,9 @@ public class MicrosoftAuth {
         long start = System.currentTimeMillis();
         long expiry = start + (dcr.expires_in() * 1000L);
 
+        // FIX C-5: tracking de interval adaptativo (slow_down aumenta, authorization_pending mantém)
+        int currentInterval = dcr.interval();
+
         while (System.currentTimeMillis() < expiry) {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://login.microsoftonline.com/consumers/oauth2/v2.0/token"))
@@ -130,18 +139,41 @@ public class MicrosoftAuth {
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+            JsonObject json;
+            try {
+                json = JsonParser.parseString(response.body()).getAsJsonObject();
+            } catch (Exception parseErr) {
+                throw new IOException("Resposta inválida do Microsoft token endpoint: " + response.body(), parseErr);
+            }
 
             if (response.statusCode() == 200) {
-                return json.get("access_token").getAsString();
+                return getStringOrThrow(json, "access_token", "TokenResponse");
             }
 
-            String error = json.has("error") ? json.get("error").getAsString() : "";
-            if ("authorization_pending".equals(error)) {
-                Thread.sleep(dcr.interval() * 1000L);
-            } else {
-                throw new IOException("Erro no polling Microsoft: " + error);
+            String error = json.has("error") && !json.get("error").isJsonNull()
+                    ? json.get("error").getAsString() : "";
+
+            switch (error) {
+                case "authorization_pending":
+                    // Estado normal: usuário ainda não autorizou. Aguarda e tenta de novo.
+                    break;
+                case "slow_down":
+                    // FIX C-5: Microsoft pediu pra esperar mais. Aumenta interval em 5s.
+                    // Antes o código abortava o login nesse erro.
+                    currentInterval += 5;
+                    LOG.debug("Microsoft solicitou slow_down; novo interval={}s", currentInterval);
+                    break;
+                case "expired_token":
+                    throw new IOException("Device code expirou. Reinicie o login.");
+                case "access_denied":
+                    throw new IOException("Usuário negou a autorização.");
+                case "":
+                    throw new IOException("Resposta sem campo 'error' (HTTP " + response.statusCode() + "): " + response.body());
+                default:
+                    throw new IOException("Erro no polling Microsoft: " + error);
             }
+
+            Thread.sleep(currentInterval * 1000L);
         }
         throw new IOException("Tempo de login expirado");
     }
@@ -165,8 +197,35 @@ public class MicrosoftAuth {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new IOException("Erro XBL: " + response.body());
+        if (response.statusCode() != 200) {
+            throw new IOException("Erro XBL (HTTP " + response.statusCode() + "): " + response.body());
+        }
         return JsonParser.parseString(response.body()).getAsJsonObject();
+    }
+
+    /**
+     * FIX C-4 (parte 1): extrai uhs com null check defensivo.
+     * Antes: chain de .get(0).getAsJsonObject().get("uhs").getAsString() sem validação.
+     */
+    private String extractUhsFromXbl(JsonObject xblResponse) {
+        JsonObject displayClaims = xblResponse.getAsJsonObject("DisplayClaims");
+        if (displayClaims == null) {
+            throw new IllegalStateException("XBL response sem DisplayClaims");
+        }
+        JsonArray xui = displayClaims.getAsJsonArray("xui");
+        if (xui == null || xui.isEmpty()) {
+            throw new IllegalStateException("XBL response sem xui array");
+        }
+        JsonElement first = xui.get(0);
+        if (first == null || first.isJsonNull()) {
+            throw new IllegalStateException("XBL xui[0] ausente");
+        }
+        JsonObject firstObj = first.getAsJsonObject();
+        JsonElement uhs = firstObj.get("uhs");
+        if (uhs == null || uhs.isJsonNull()) {
+            throw new IllegalStateException("XBL xui[0] sem campo uhs");
+        }
+        return uhs.getAsString();
     }
 
     private JsonObject authenticateXSTS(String xblToken) throws IOException, InterruptedException {
@@ -189,7 +248,9 @@ public class MicrosoftAuth {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new IOException("Erro XSTS: " + response.body());
+        if (response.statusCode() != 200) {
+            throw new IOException("Erro XSTS (HTTP " + response.statusCode() + "): " + response.body());
+        }
         return JsonParser.parseString(response.body()).getAsJsonObject();
     }
 
@@ -205,8 +266,11 @@ public class MicrosoftAuth {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new IOException("Erro Minecraft Login: " + response.body());
-        return JsonParser.parseString(response.body()).getAsJsonObject().get("access_token").getAsString();
+        if (response.statusCode() != 200) {
+            throw new IOException("Erro Minecraft Login (HTTP " + response.statusCode() + "): " + response.body());
+        }
+        JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+        return getStringOrThrow(json, "access_token", "MinecraftToken");
     }
 
     private JsonObject getMinecraftProfile(String mcAccessToken) throws IOException, InterruptedException {
@@ -217,7 +281,32 @@ public class MicrosoftAuth {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new IOException("Erro Perfil Minecraft: " + response.body());
+        if (response.statusCode() != 200) {
+            throw new IOException("Erro Perfil Minecraft (HTTP " + response.statusCode() + "): " + response.body());
+        }
         return JsonParser.parseString(response.body()).getAsJsonObject();
+    }
+
+    // =============== Helpers JSON defensivos (FIX C-4 parte 2) ===============
+
+    private static String getStringOrThrow(JsonObject obj, String field, String context) {
+        if (obj == null) {
+            throw new IllegalStateException(context + ": resposta JSON nula");
+        }
+        JsonElement el = obj.get(field);
+        if (el == null || el.isJsonNull()) {
+            throw new IllegalStateException(context + ": campo '" + field + "' ausente");
+        }
+        if (!el.isJsonPrimitive()) {
+            throw new IllegalStateException(context + ": campo '" + field + "' não é primitivo");
+        }
+        return el.getAsString();
+    }
+
+    private static int getIntOrDefault(JsonObject obj, String field, int defaultValue) {
+        if (obj == null) return defaultValue;
+        JsonElement el = obj.get(field);
+        if (el == null || el.isJsonNull() || !el.isJsonPrimitive()) return defaultValue;
+        try { return el.getAsInt(); } catch (Exception e) { return defaultValue; }
     }
 }
