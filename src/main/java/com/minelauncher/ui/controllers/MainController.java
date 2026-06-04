@@ -200,14 +200,12 @@ public class MainController implements Initializable {
     }
 
     private long sessionStartMs = System.currentTimeMillis();
-    private javafx.animation.AnimationTimer liveTimer;
     private volatile boolean netOnline = true;
-    private long lastRamUpdateNs = 0;
-    private long lastNetUpdateNs = 0;
-    private int clockTickCounter = 0;
-    // FIX H-9: previne múltiplas threads de net-check se a chamada for feita várias
-    // vezes dentro do mesmo tick. Garante que sempre há no máximo 1 net-check em vôo.
-    private final java.util.concurrent.atomic.AtomicBoolean netCheckRunning = new java.util.concurrent.atomic.AtomicBoolean(false);
+    // NetMonitor é lazy-init (cria ao primeiro checkNetAsync). Encapsula a
+    // thread/AtomicBoolean/lógica de ping que antes vivia aqui (H-1, H-9).
+    private com.minelauncher.net.NetMonitor netMonitor;
+    // StatusBarUpdater encapsula o AnimationTimer + clock/RAM/net (H-1)
+    private StatusBarUpdater statusBarUpdater;
 
     // Fuso horário fixo do Brasil — não depende do default da JVM
     private static final java.time.ZoneId BRAZIL_ZONE = java.time.ZoneId.of("America/Sao_Paulo");
@@ -301,7 +299,7 @@ public class MainController implements Initializable {
                 }
                 // Resetar contadores de sessão + atualizar header
                 sessionStartMs = System.currentTimeMillis();
-                updateClock();
+                if (statusBarUpdater != null) statusBarUpdater.updateClock();
                 updateWelcomeHeader();
             }
         });
@@ -929,64 +927,15 @@ public class MainController implements Initializable {
     }
 
     // ==================== LIVE UPDATES (clock · RAM · net) ====================
+    // H-1: extraído para StatusBarUpdater
 
     private void startLiveUpdates() {
-        // 1) Popula valores iniciais IMEDIATAMENTE
-        updateClock();
-        updateRam();
-        checkNetAsync();
-        debugLog("startLiveUpdates OK | label=" + statusClockLabel + " session=" + sessionTimeLabel);
-
-        // 2) AnimationTimer — roda a 60fps na FX thread, é o timer mais confiável
-        if (liveTimer == null) {
-            liveTimer = new javafx.animation.AnimationTimer() {
-                @Override
-                public void handle(long now) {
-                    // Clock + session time — a cada 1s
-                    updateClock();
-
-                    // RAM a cada 2s
-                    if (now - lastRamUpdateNs >= 2_000_000_000L) {
-                        updateRam();
-                        lastRamUpdateNs = now;
-                    }
-
-                    // Net a cada 30s
-                    if (now - lastNetUpdateNs >= 30_000_000_000L) {
-                        checkNetAsync();
-                        lastNetUpdateNs = now;
-                    }
-                }
-            };
-            liveTimer.start();
+        if (statusBarUpdater == null) {
+            statusBarUpdater = new StatusBarUpdater(
+                    statusClockLabel, sessionTimeLabel, statusRamLabel, statusNetLabel,
+                    netMonitor, this::checkNetAsync);
         }
-    }
-
-    private void updateClock() {
-        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(BRAZIL_ZONE);
-        if (statusClockLabel != null) {
-            // Relógio de parede: data + hora (fuso BRT)
-            statusClockLabel.setText(now.format(TIME_FMT_FULL));
-        }
-        if (sessionTimeLabel != null) {
-            // Tempo de sessão: formato compacto tipo "42s", "5m 12s", "1h 03m"
-            sessionTimeLabel.setText(formatElapsedCompact(System.currentTimeMillis() - sessionStartMs));
-        }
-        if (++clockTickCounter % 100 == 0) {
-            debugLog("tick #" + clockTickCounter + " clock=" + now.format(TIME_FMT));
-        }
-    }
-
-    private static String formatElapsedCompact(long ms) {
-        long s = ms / 1000;
-        long h = s / 3600;
-        long m = (s % 3600) / 60;
-        long sec = s % 60;
-        if (h > 0)
-            return String.format("%dh %02dm", h, m);
-        if (m > 0)
-            return String.format("%dm %02ds", m, sec);
-        return sec + "s";
+        statusBarUpdater.start();
     }
 
     private void updateWelcomeHeader() {
@@ -1020,16 +969,6 @@ public class MainController implements Initializable {
         LOG.debug(msg);
     }
 
-    private void updateRam() {
-        if (statusRamLabel == null)
-            return;
-        Runtime rt = Runtime.getRuntime();
-        long usedBytes = rt.totalMemory() - rt.freeMemory();
-        long maxBytes = rt.maxMemory();
-        statusRamLabel.setText(com.minelauncher.utils.FileUtils.formatBytes(usedBytes) +
-                " / " + com.minelauncher.utils.FileUtils.formatBytes(maxBytes));
-    }
-
     private void updateJavaInfo() {
         if (statusJavaLabel == null)
             return;
@@ -1037,41 +976,15 @@ public class MainController implements Initializable {
     }
 
     private void checkNetAsync() {
-        // FIX H-9: usa AtomicBoolean para evitar acúmulo de threads se a função
-        // for chamada várias vezes em rajada (ex: usuário troca de tab rapidamente).
-        if (!netCheckRunning.compareAndSet(false, true)) {
-            return;
-        }
-        Thread t = new Thread(() -> {
-            try {
-                boolean ok = pingMojang();
-                netOnline = ok;
+        // Delegado para NetMonitor (H-1, H-9): thread-safe, daemon, sem
+        // duplicação de lógica de ping/timeout. Re-entrância protegida.
+        if (netMonitor == null) {
+            netMonitor = new com.minelauncher.net.NetMonitor(() -> {
+                netOnline = netMonitor.isOnline();
                 Platform.runLater(this::renderNetLabel);
-            } finally {
-                netCheckRunning.set(false);
-            }
-        }, "net-check");
-        t.setDaemon(true);
-        t.start();
-    }
-
-    private boolean pingMojang() {
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) java.net.URI
-                    .create("https://launchermeta.mojang.com/mc/game/version_manifest_v2.json").toURL()
-                    .openConnection();
-            conn.setConnectTimeout(3000);
-            conn.setReadTimeout(3000);
-            conn.setRequestMethod("HEAD");
-            int code = conn.getResponseCode();
-            return code >= 200 && code < 400;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            if (conn != null)
-                conn.disconnect();
+            });
         }
+        netMonitor.checkAsync();
     }
 
     private void renderNetLabel() {
@@ -1138,9 +1051,8 @@ public class MainController implements Initializable {
     }
 
     public void stopLiveUpdates() {
-        if (liveTimer != null) {
-            liveTimer.stop();
-            liveTimer = null;
+        if (statusBarUpdater != null) {
+            statusBarUpdater.stop();
         }
     }
 
