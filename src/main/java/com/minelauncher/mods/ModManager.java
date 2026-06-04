@@ -20,20 +20,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ModManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(ModManager.class);
-    private static final String MODRINTH_API = "https://api.modrinth.com/v2";
+    private String getModrinthApiUrl() {
+        return com.minelauncher.settings.SettingsManager.getInstance().getModrinthApiUrl();
+    }
     // O launcher fala com CurseForge através deste proxy. A chave real fica
     // server-side na Vercel (env var CURSEFORGE_API_KEY) e NUNCA é embarcada
-    // no JAR. Para usar outro proxy, defina CURSEFORGE_PROXY_URL na env.
-    // Veja vercel-proxy/README.md para detalhes do deploy.
-    private static final String CURSEFORGE_PROXY_URL = resolveCurseForgeProxyUrl();
-
-    private static String resolveCurseForgeProxyUrl() {
-        String env = System.getenv("CURSEFORGE_PROXY_URL");
-        if (env != null && !env.isBlank()) {
-            return env.trim();
-        }
-        // Substitua pelo domínio real do seu deploy na Vercel
-        return "https://minelauncher-proxy.vercel.app/api/cf";
+    // no JAR.
+    private String getCurseForgeProxyUrl() {
+        return com.minelauncher.settings.SettingsManager.getInstance().getCurseForgeProxyUrl();
     }
 
     // Cache de API com TTL de 5 minutos
@@ -84,7 +78,7 @@ public class ModManager {
         if (cached != null) return cached;
 
         String encodedQuery = java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8);
-        String url = MODRINTH_API + "/search?query=" + encodedQuery +
+        String url = getModrinthApiUrl() + "/search?query=" + encodedQuery +
                 "&limit=" + limit;
         List<String> facetParts = new ArrayList<>();
         if (gameVersion != null && !gameVersion.isEmpty()) {
@@ -134,7 +128,7 @@ public class ModManager {
      * Obtém versões de um mod do Modrinth
      */
     public List<JsonObject> getModrinthVersions(String projectId, String gameVersion) throws IOException {
-        String url = MODRINTH_API + "/project/" + projectId + "/version?game_versions=[\"" + gameVersion + "\"]";
+        String url = getModrinthApiUrl() + "/project/" + projectId + "/version?game_versions=[\"" + gameVersion + "\"]";
 
         Request request = new Request.Builder()
                 .url(url)
@@ -163,7 +157,7 @@ public class ModManager {
         List<ModInfo> cached = getCached(cacheKey, List.class);
         if (cached != null) return cached;
 
-        String url = CURSEFORGE_PROXY_URL + "/mods/search?gameId=" + gameId +
+        String url = getCurseForgeProxyUrl() + "/mods/search?gameId=" + gameId +
                 "&classId=" + classId +
                 "&searchFilter=" + query;
         if (gameVersion != null && !gameVersion.isEmpty()) {
@@ -204,7 +198,7 @@ public class ModManager {
      * Obtém arquivos de um mod do CurseForge
      */
     public JsonArray getCurseForgeFiles(int modId, String gameVersion) throws IOException {
-        String url = CURSEFORGE_PROXY_URL + "/mods/" + modId + "/files?gameVersion=" + gameVersion + "&pageSize=20";
+        String url = getCurseForgeProxyUrl() + "/mods/" + modId + "/files?gameVersion=" + gameVersion + "&pageSize=20";
 
         Request request = new Request.Builder()
                 .url(url)
@@ -265,7 +259,7 @@ public class ModManager {
         List<ModVersionInfo> cached = getCached(cacheKey, List.class);
         if (cached != null) return cached;
 
-        String url = MODRINTH_API + "/project/" + projectId + "/version";
+        String url = getModrinthApiUrl() + "/project/" + projectId + "/version";
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "MineLauncher/1.0")
@@ -337,7 +331,9 @@ public class ModManager {
         List<ModInfo> mods = new ArrayList<>();
         if (!modsDir.exists()) return mods;
 
-        for (File file : Objects.requireNonNull(modsDir.listFiles())) {
+        File[] files = modsDir.listFiles();
+        if (files == null) return mods;
+        for (File file : files) {
             if (file.getName().endsWith(".jar")) {
                 ModInfo mod = new ModInfo();
                 mod.setFileName(file.getName());
@@ -522,7 +518,7 @@ public class ModManager {
             pool.submit(() -> {
                 try {
                     // Buscar informações do arquivo via API (proxy)
-                    String apiUrl = CURSEFORGE_PROXY_URL + "/mods/" + projectID + "/files/" + fileID;
+                    String apiUrl = getCurseForgeProxyUrl() + "/mods/" + projectID + "/files/" + fileID;
                     Request request = new Request.Builder()
                             .url(apiUrl)
                             .header("User-Agent", "MineLauncher/1.0")
@@ -568,12 +564,16 @@ public class ModManager {
                     LOG.warn("Erro ao baixar mod projectID={} fileID={}: {}", projectID, fileID, e.getMessage());
                     failed.incrementAndGet();
                 } finally {
-                    int done = downloaded.get() + failed.get();
-                    if (progress != null && done % 10 == 0) { // Atualizar a cada 10 mods
-                        progress.accept("Baixando mods: " + downloaded.get() + "/" + total + (failed.get() > 0 ? " (" + failed.get() + " falhas)" : ""),
-                                0.6 + ((double) done / total) * 0.35);
-                    }
                     latch.countDown();
+                    try {
+                        int done = downloaded.get() + failed.get();
+                        if (progress != null && done % 10 == 0) { // Atualizar a cada 10 mods
+                            progress.accept("Baixando mods: " + downloaded.get() + "/" + total + (failed.get() > 0 ? " (" + failed.get() + " falhas)" : ""),
+                                    0.6 + ((double) done / total) * 0.35);
+                        }
+                    } catch (Exception e) {
+                        LOG.warn("Erro ao atualizar progresso de download", e);
+                    }
                 }
             });
         }
@@ -584,8 +584,10 @@ public class ModManager {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LOG.warn("Download de mods interrompido");
+            pool.shutdownNow();
+        } finally {
+            pool.shutdown();
         }
-        pool.shutdown();
 
         LOG.info("Download de mods concluído: {} baixados, {} falhas de {}", downloaded.get(), failed.get(), total);
     }
@@ -657,7 +659,7 @@ public class ModManager {
             LOG.info("Buscando versões do modpack Modrinth ID: {}", projectId);
 
             Request request = new Request.Builder()
-                    .url(MODRINTH_API + "/project/" + projectId + "/version?limit=1")
+                    .url(getModrinthApiUrl() + "/project/" + projectId + "/version?limit=1")
                     .header("User-Agent", "MineLauncher/1.0")
                     .build();
 
@@ -698,6 +700,14 @@ public class ModManager {
         LOG.info("Extração concluída");
     }
 
+    private void validatePath(File targetDir, File destFile) throws IOException {
+        String canonicalDest = destFile.getCanonicalPath();
+        String canonicalTarget = targetDir.getCanonicalPath();
+        if (!canonicalDest.startsWith(canonicalTarget + File.separator)) {
+            throw new IOException("Entrada de arquivo inválida (Zip Slip): " + destFile.getName());
+        }
+    }
+
     /**
      * Extrai .mrpack do Modrinth (zip com modrinth.index.json + overrides/)
      */
@@ -716,6 +726,7 @@ public class ModManager {
                     String relativePath = name.substring("overrides/".length());
                     if (relativePath.isEmpty()) continue;
                     File dest = new File(modpackDir, relativePath);
+                    validatePath(modpackDir, dest);
                     dest.getParentFile().mkdirs();
                     try (java.io.InputStream is = zip.getInputStream(entry);
                          java.io.FileOutputStream fos = new java.io.FileOutputStream(dest)) {
@@ -758,6 +769,7 @@ public class ModManager {
                 String fileUrl = fileObj.get("downloads").getAsJsonArray().get(0).getAsString();
                 String path = fileObj.get("path").getAsString();
                 File dest = new File(modpackDir, path);
+                validatePath(modpackDir, dest);
                 dest.getParentFile().mkdirs();
 
                 downloader.download(fileUrl, dest, null, null);
@@ -804,6 +816,7 @@ public class ModManager {
                     String relativePath = name.substring("overrides/".length());
                     if (relativePath.isEmpty()) continue;
                     File dest = new File(modpackDir, relativePath);
+                    validatePath(modpackDir, dest);
                     dest.getParentFile().mkdirs();
                     try (java.io.InputStream is = zip.getInputStream(entry);
                          java.io.FileOutputStream fos = new java.io.FileOutputStream(dest)) {
@@ -848,7 +861,9 @@ public class ModManager {
         File modpacksDir = new File(profileDir, "modpacks");
         if (!modpacksDir.exists()) return modpacks;
 
-        for (File dir : modpacksDir.listFiles(File::isDirectory)) {
+        File[] dirs = modpacksDir.listFiles(File::isDirectory);
+        if (dirs == null) return modpacks;
+        for (File dir : dirs) {
             File manifest = new File(dir, "manifest.json");
             if (manifest.exists()) {
                 try {
@@ -881,15 +896,10 @@ public class ModManager {
                 String json = java.nio.file.Files.readString(manifest.toPath());
                 JsonObject obj = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
                 LOG.info("Removendo modpack: {}", obj.get("name").getAsString());
-            } catch (Exception e) {
-                LOG.warn("Erro ao ler manifesto para remoção");
+            } catch (com.google.gson.JsonSyntaxException | java.io.IOException e) {
+                LOG.error("Erro ao ler manifest.json para remoção", e);
             }
         }
-
-        // Remover todos os .jar da pasta mods que foram extraídos
-        // (por segurança, vamos listar os mods do modpack antes de remover)
-        deleteDirectory(modpackDir);
-        LOG.info("Modpack removido: {}", modpackName);
     }
 
     /**
@@ -899,7 +909,9 @@ public class ModManager {
         File modpacksDir = new File(profileDir, "modpacks");
         if (!modpacksDir.exists()) return;
 
-        for (File dir : modpacksDir.listFiles(File::isDirectory)) {
+        File[] dirs = modpacksDir.listFiles(File::isDirectory);
+        if (dirs == null) return;
+        for (File dir : dirs) {
             File manifest = new File(dir, "manifest.json");
             if (manifest.exists()) {
                 try {
@@ -910,11 +922,8 @@ public class ModManager {
                         LOG.info("Modpack removido: {}", modpackName);
                         return;
                     }
-                } catch (Exception e) {
-                    // FIX C-10: substitui catch silencioso por log estruturado.
-                    // Antes erros de parse de manifest.json eram invisíveis e
-                    // mascaravam mods corrompidos / incompatíveis.
-                    LOG.debug("Não foi possível ler manifesto de {}", dir.getName(), e);
+                } catch (java.io.IOException | com.google.gson.JsonSyntaxException e) {
+                    LOG.error("Não foi possível ler manifesto de {}", dir.getName(), e);
                 }
             }
         }

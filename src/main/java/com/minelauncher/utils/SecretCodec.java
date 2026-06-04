@@ -34,38 +34,33 @@ import java.util.Set;
 public final class SecretCodec {
     private static final Logger LOG = LoggerFactory.getLogger(SecretCodec.class);
 
-    /**
-     * Chave estática (32 bytes para AES-256). Derivada de identificador do projeto.
-     * NÃO É SEGURO — apenas obfuscação.
-     */
-    private static final byte[] KEY = deriveKey("MineLauncher/2026/secret-derivation/v1", 32);
+    private static final byte[] KEY = loadOrGenerateKey();
 
     private SecretCodec() {}
 
-    private static byte[] deriveKey(String seed, int len) {
-        // Derivação simples (NÃO use em produção) — só pra gerar 32 bytes determinísticos
+    private static byte[] loadOrGenerateKey() {
+        Path keyPath = Paths.get(System.getProperty("user.home"), ".minelauncher", "secret.key");
         try {
-            byte[] seedBytes = seed.getBytes("UTF-8");
-            byte[] out = new byte[len];
-            // Estica via SHA-256 repetido (sem salt, sem iterations, sem PBKDF2 — propósito único é gerar bytes)
-            int filled = 0;
-            int round = 0;
-            while (filled < len) {
-                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-                md.update(seedBytes);
-                md.update((byte) round);
-                byte[] digest = md.digest();
-                int toCopy = Math.min(digest.length, len - filled);
-                System.arraycopy(digest, 0, out, filled, toCopy);
-                filled += toCopy;
-                round++;
+            if (Files.exists(keyPath)) {
+                return Files.readAllBytes(keyPath);
             }
-            return out;
-        } catch (Exception e) {
-            // Fallback ridiculamente simples — mas em prática nunca deve cair aqui
-            byte[] fallback = new byte[len];
-            for (int i = 0; i < len; i++) fallback[i] = (byte) seed.charAt(i % seed.length());
-            return fallback;
+            
+            // Generate new random key
+            byte[] newKey = new byte[32];
+            new java.security.SecureRandom().nextBytes(newKey);
+            
+            Files.createDirectories(keyPath.getParent());
+            Files.write(keyPath, newKey);
+            // Try to restrict permissions to owner only (POSIX)
+            try {
+                Files.setPosixFilePermissions(keyPath, ownerOnly());
+            } catch (UnsupportedOperationException | IOException e) {
+                // Ignore if not supported or failed
+            }
+            return newKey;
+        } catch (IOException e) {
+            LOG.error("Falha ao carregar/gerar chave de criptografia, usando fallback inseguro", e);
+            return new byte[32]; // Fallback (inseguro)
         }
     }
 

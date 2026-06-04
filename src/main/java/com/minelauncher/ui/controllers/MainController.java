@@ -2,6 +2,9 @@ package com.minelauncher.ui.controllers;
 
 import com.minelauncher.auth.MicrosoftAuth;
 import com.minelauncher.auth.OfflineAuth;
+import com.minelauncher.ui.services.AuthService;
+import com.minelauncher.ui.services.VersionInstallationService;
+import com.minelauncher.ui.services.GameLaunchService;
 import com.minelauncher.launcher.GameLauncher;
 import com.minelauncher.mods.ModManager;
 import com.minelauncher.models.ModInfo;
@@ -184,6 +187,9 @@ public class MainController implements Initializable {
     private ModManager modManager;
     private MicrosoftAuth microsoftAuth;
     private ModActions modActions;
+    private AuthService authService;
+    private VersionInstallationService versionInstallationService;
+    private GameLaunchService gameLaunchService;
 
     // Lista de resultados da última busca
     private List<ModInfo> lastSearchResults = new ArrayList<>();
@@ -264,6 +270,20 @@ public class MainController implements Initializable {
         versionManager = new VersionManager(settings.getBaseDir());
         gameLauncher = new GameLauncher(settings.getBaseDir(), versionManager);
         modManager = new ModManager(settings.getBaseDir());
+        this.versionInstallationService = new VersionInstallationService(versionManager, statusLabel, progressBar);
+        this.gameLaunchService = new GameLaunchService(versionManager, gameLauncher);
+        this.authService = new AuthService(
+            this::showDeviceCodeOverlay,
+            () -> {
+                refreshAccountCombo();
+                accountCombo.setValue(SettingsManager.getInstance().getSelectedAccount().getName() + " (Logado)");
+                statusLabel.setText("Login concluído!");
+            },
+            err -> {
+                statusLabel.setText("Erro no login: " + err);
+                closeDeviceCodeOverlay();
+            }
+        );
         microsoftAuth = new MicrosoftAuth();
         modActions = new ModActions(this, modManager, profileManager);
         debugLog(">>> initialize() deps OK");
@@ -1058,26 +1078,7 @@ public class MainController implements Initializable {
     @FXML
     private void loginMicrosoft() {
         statusLabel.setText("Iniciando login Microsoft...");
-        
-        microsoftAuth.login(dcr -> {
-            Platform.runLater(() -> {
-                showDeviceCodeOverlay(dcr);
-            });
-        }).thenAccept(profile -> {
-            Platform.runLater(() -> {
-                SettingsManager.getInstance().addAccount(profile);
-                refreshAccountCombo();
-                accountCombo.setValue(profile.getName() + " (Microsoft)");
-                statusLabel.setText("Login concluído: " + profile.getName());
-            });
-        }).exceptionally(ex -> {
-            Platform.runLater(() -> {
-                statusLabel.setText("Erro no login: " + ex.getMessage());
-                // Tentar fechar overlay se existir
-                closeDeviceCodeOverlay();
-            });
-            return null;
-        });
+        authService.loginMicrosoft();
     }
 
     private StackPane deviceCodeOverlay;
@@ -1153,13 +1154,10 @@ public class MainController implements Initializable {
         dialog.setContentText("Nome:");
 
         dialog.showAndWait().ifPresent(name -> {
-            if (!name.trim().isEmpty()) {
-                GameProfile profile = OfflineAuth.createOfflineProfile(name.trim());
-                SettingsManager.getInstance().addAccount(profile);
-                refreshAccountCombo();
-                accountCombo.setValue(profile.getName() + " (Offline)");
-                statusLabel.setText("Conta offline criada: " + profile.getName());
-            }
+            authService.loginOffline(name);
+            refreshAccountCombo();
+            accountCombo.setValue(SettingsManager.getInstance().getSelectedAccount().getName() + " (Offline)");
+            statusLabel.setText("Conta offline criada: " + name);
         });
     }
 
@@ -1194,33 +1192,11 @@ public class MainController implements Initializable {
         }
 
         String versionId = selected.split(" \\[")[0]; // Remover [type]
-
-        new Thread(() -> {
-            try {
-                Platform.runLater(() -> {
-                    statusLabel.setText("Instalando " + versionId + "...");
-                    progressBar.setProgress(-1); // Indeterminado
-                });
-
-                versionManager.downloadVersion(versionId, (msg, pct) -> {
-                    Platform.runLater(() -> {
-                        statusLabel.setText(msg);
-                        progressBar.setProgress(pct);
-                    });
-                });
-
-                Platform.runLater(() -> {
-                    statusLabel.setText("Versão " + versionId + " instalada!");
-                    progressBar.setProgress(1.0);
-                    loadProfiles();
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    statusLabel.setText("Erro: " + e.getMessage());
-                    progressBar.setProgress(0);
-                });
-            }
-        }).start();
+        
+        versionInstallationService.installVersion(versionId, 
+            this::loadProfiles, 
+            e -> LOG.error("Erro na instalação", e)
+        );
     }
 
     // ==================== INICIAR JOGO ====================
@@ -1241,7 +1217,6 @@ public class MainController implements Initializable {
             return;
         }
 
-        // Sincronizar sliders da config com o perfil ativo
         minRamField.setText(String.valueOf(profile.getMinRam()));
         maxRamField.setText(String.valueOf(profile.getMaxRam()));
 
@@ -1250,99 +1225,29 @@ public class MainController implements Initializable {
         setBusy();
         consoleArea.clear();
 
-        new Thread(() -> {
-            try {
-                // 1. Baixar versão vanilla se necessário
-                if (!versionManager.getInstalledVersions().contains(profile.getGameVersion())) {
-                    Platform.runLater(
-                            () -> statusLabel.setText("Baixando Minecraft " + profile.getGameVersion() + "..."));
-                    versionManager.downloadVersion(profile.getGameVersion(), (msg, pct) -> {
-                        Platform.runLater(() -> {
-                            statusLabel.setText(msg);
-                            progressBar.setProgress(pct);
-                        });
-                    });
-                }
-
-                // 2. Instalar mod loader se necessário
-                String loader = profile.getModLoader();
-                String loaderVersion = profile.getModLoaderVersion();
-                if (loader != null && !"vanilla".equals(loader) && loaderVersion != null && !loaderVersion.isEmpty()) {
-                    String versionId = gameLauncher.resolveVersionId(profile);
-                    if (!versionManager.getInstalledVersions().contains(versionId)) {
-                        Platform.runLater(
-                                () -> statusLabel.setText("Instalando " + loader + " " + loaderVersion + "..."));
-                        switch (loader) {
-                            case "forge":
-                                versionManager.installForge(profile.getGameVersion(), loaderVersion, (msg, pct) -> {
-                                    Platform.runLater(() -> statusLabel.setText("Forge: " + msg));
-                                });
-                                break;
-                            case "fabric":
-                                versionManager.installFabric(profile.getGameVersion(), (msg, pct) -> {
-                                    Platform.runLater(() -> statusLabel.setText("Fabric: " + msg));
-                                });
-                                break;
-                            case "neoforge":
-                                versionManager.installNeoForge(profile.getGameVersion(), loaderVersion, (msg, pct) -> {
-                                    Platform.runLater(() -> statusLabel.setText("NeoForge: " + msg));
-                                });
-                                break;
-                            case "quilt":
-                                versionManager.installQuilt(profile.getGameVersion(), (msg, pct) -> {
-                                    Platform.runLater(() -> statusLabel.setText("Quilt: " + msg));
-                                });
-                                break;
-                        }
-                    }
-                }
-
-                gameLauncher.launch(profile, account, line -> {
-                    Platform.runLater(() -> {
-                        consoleArea.appendText(line + "\n");
-                        // Auto-scroll
-                        consoleArea.setScrollTop(Double.MAX_VALUE);
-                    });
-                });
-
-                Platform.runLater(() -> {
-                    statusLabel.setText("Minecraft em execução!");
-                    playButton.setText("Jogando...");
-                    setPlaying();
-                });
-
-                // Aguardar fim do jogo
-                Thread watcher = new Thread(() -> {
-                    try {
-                        while (gameLauncher.isRunning()) {
-                            Thread.sleep(1000);
-                        }
-                        Platform.runLater(() -> {
-                            statusLabel.setText("Jogo encerrado");
-                            playButton.setText("JOGAR");
-                            playButton.setDisable(false);
-                            progressBar.setProgress(0);
-                            setReady();
-                        });
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                }, "game-watcher");
-                // FIX C-9: setDaemon(true) impede que essa thread impeça o shutdown
-                // da JVM. Antes era um thread "user" e em logout/logout rápido a
-                // aplicação ficava pendurada esperando o game launcher reportar.
-                watcher.setDaemon(true);
-                watcher.start();
-
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    statusLabel.setText("Erro ao iniciar: " + e.getMessage());
-                    playButton.setDisable(false);
-                    consoleArea.appendText("ERRO: " + e.getMessage() + "\n");
-                    setError();
-                });
-            }
-        }).start();
+        gameLaunchService.launch(profile, account,
+            msg -> Platform.runLater(() -> statusLabel.setText(msg)),
+            (msg, pct) -> Platform.runLater(() -> { statusLabel.setText(msg); progressBar.setProgress(pct); }),
+            line -> Platform.runLater(() -> { consoleArea.appendText(line + "\n"); consoleArea.setScrollTop(Double.MAX_VALUE); }),
+            () -> Platform.runLater(() -> {
+                statusLabel.setText("Minecraft em execução!");
+                playButton.setText("Jogando...");
+                setPlaying();
+            }),
+            () -> Platform.runLater(() -> {
+                statusLabel.setText("Jogo encerrado");
+                playButton.setText("JOGAR");
+                playButton.setDisable(false);
+                progressBar.setProgress(0);
+                setReady();
+            }),
+            e -> Platform.runLater(() -> {
+                statusLabel.setText("Erro ao iniciar: " + e.getMessage());
+                playButton.setDisable(false);
+                consoleArea.appendText("ERRO: " + e.getMessage() + "\n");
+                setError();
+            })
+        );
     }
 
     // ==================== MODS ====================

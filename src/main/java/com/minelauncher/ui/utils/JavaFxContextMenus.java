@@ -24,14 +24,26 @@ public final class JavaFxContextMenus {
                 field.setText(val.replaceAll("\\D", ""));
             }
             if (!field.getText().isEmpty()) {
-                int v = Integer.parseInt(field.getText());
-                if (v < min) field.setText(String.valueOf(min));
-                if (v > max) field.setText(String.valueOf(max));
+                try {
+                    int v = Integer.parseInt(field.getText());
+                    if (v > max) field.setText(String.valueOf(max));
+                } catch (NumberFormatException e) {
+                    field.setText("");
+                }
             }
         });
         field.focusedProperty().addListener((obs, was, is) -> {
-            if (!is && field.getText().isEmpty()) {
-                field.setText(String.valueOf(def));
+            if (!is) {
+                if (field.getText().isEmpty()) {
+                    field.setText(String.valueOf(def));
+                } else {
+                    try {
+                        int v = Integer.parseInt(field.getText());
+                        if (v < min) field.setText(String.valueOf(min));
+                    } catch (NumberFormatException e) {
+                        field.setText(String.valueOf(def));
+                    }
+                }
             }
         });
     }

@@ -176,7 +176,16 @@ public class VersionManager {
         JsonObject objects = JsonParser.parseString(json).getAsJsonObject().getAsJsonObject("objects");
 
         int total = objects.size();
-        int current = 0;
+        java.util.concurrent.atomic.AtomicInteger current = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger failed = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        int threadCount = com.minelauncher.settings.SettingsManager.getInstance().getDownloadThreads();
+        if (threadCount <= 0 || threadCount > 32) {
+            threadCount = 8;
+        }
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(total);
 
         for (Map.Entry<String, com.google.gson.JsonElement> entry : objects.entrySet()) {
             String hash = entry.getValue().getAsJsonObject().get("hash").getAsString();
@@ -184,17 +193,61 @@ public class VersionManager {
             String url = "https://resources.download.minecraft.net/" + prefix + "/" + hash;
             File dest = new File(baseDir, "assets/objects/" + prefix + "/" + hash);
 
-            downloader.download(url, dest, hash, null);
-            current++;
-            progress.accept("Assets: " + current + "/" + total, 0.25 + ((double) current / total) * 0.35);
+            pool.submit(() -> {
+                try {
+                    downloader.download(url, dest, hash, null);
+                    current.incrementAndGet();
+                } catch (Exception e) {
+                    failed.incrementAndGet();
+                    LOG.debug("Falha ao baixar asset hash={}: {}", hash, e.getMessage());
+                } finally {
+                    latch.countDown();
+                    try {
+                        int done = current.get() + failed.get();
+                        if (progress != null && (done % 50 == 0 || done == total)) {
+                            progress.accept("Assets: " + done + "/" + total + (failed.get() > 0 ? " (" + failed.get() + " falhas)" : ""),
+                                    0.25 + ((double) done / total) * 0.35);
+                        }
+                    } catch (Exception e) {
+                        LOG.debug("Erro ao reportar progresso do download de assets", e);
+                    }
+                }
+            });
+        }
+
+        try {
+            if (!latch.await(30, TimeUnit.MINUTES)) {
+                LOG.warn("Download de assets excedeu o tempo limite");
+                pool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("Download de assets interrompido");
+            pool.shutdownNow();
+            throw new IOException("Download de assets interrompido", e);
+        } finally {
+            pool.shutdown();
+            try {
+                if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                pool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        if (failed.get() > 0) {
+            LOG.warn("Download de assets concluído com {} falhas de um total de {}", failed.get(), total);
+        } else {
+            LOG.info("Download de todos os {} assets concluído com sucesso", total);
         }
     }
 
     private void downloadLibraries(VersionDetail detail, BiConsumer<String, Double> progress) throws IOException {
         List<VersionDetail.Library> libraries = detail.getLibraries();
-        int total = libraries.size();
-        int current = 0;
-
+        List<VersionDetail.DownloadFile> toDownload = new ArrayList<>();
+        
         for (VersionDetail.Library lib : libraries) {
             if (!lib.isAllowed()) continue;
 
@@ -203,9 +256,7 @@ public class VersionManager {
 
             // Artefato principal
             if (downloads.getArtifact() != null) {
-                VersionDetail.DownloadFile artifact = downloads.getArtifact();
-                File dest = new File(baseDir, "libraries/" + artifact.getPath());
-                downloader.download(artifact.getUrl(), dest, artifact.getSha1(), null);
+                toDownload.add(downloads.getArtifact());
             }
 
             // Natives (lwjgl, etc.)
@@ -215,16 +266,82 @@ public class VersionManager {
                 if (nativeClassifier != null) {
                     VersionDetail.DownloadFile nativeFile = downloads.getClassifiers().get(nativeClassifier);
                     if (nativeFile != null) {
-                        File dest = new File(baseDir, "libraries/" + nativeFile.getPath());
-                        downloader.download(nativeFile.getUrl(), dest, nativeFile.getSha1(), null);
+                        toDownload.add(nativeFile);
                     }
                 }
             }
-
-            current++;
-            progress.accept("Bibliotecas: " + current + "/" + total,
-                    0.6 + ((double) current / total) * 0.1);
         }
+
+        int total = toDownload.size();
+        if (total == 0) return;
+
+        java.util.concurrent.atomic.AtomicInteger current = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger failed = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        int threadCount = com.minelauncher.settings.SettingsManager.getInstance().getDownloadThreads();
+        if (threadCount <= 0 || threadCount > 32) {
+            threadCount = 8;
+        }
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(total);
+
+        for (VersionDetail.DownloadFile artifact : toDownload) {
+            File dest = new File(baseDir, "libraries/" + artifact.getPath());
+            pool.submit(() -> {
+                try {
+                    downloader.download(artifact.getUrl(), dest, artifact.getSha1(), null);
+                    current.incrementAndGet();
+                } catch (Exception e) {
+                    failed.incrementAndGet();
+                    LOG.warn("Falha ao baixar library {}: {}", dest.getName(), e.getMessage());
+                } finally {
+                    latch.countDown();
+                    try {
+                        int done = current.get() + failed.get();
+                        if (progress != null) {
+                            progress.accept("Bibliotecas: " + done + "/" + total + (failed.get() > 0 ? " (" + failed.get() + " falhas)" : ""),
+                                    0.6 + ((double) done / total) * 0.1);
+                        }
+                    } catch (Exception e) {
+                        LOG.debug("Erro ao reportar progresso do download de libraries", e);
+                    }
+                }
+            });
+        }
+
+        try {
+            if (!latch.await(30, TimeUnit.MINUTES)) {
+                LOG.warn("Download de bibliotecas excedeu o tempo limite");
+                pool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("Download de bibliotecas interrompido");
+            pool.shutdownNow();
+            throw new IOException("Download de bibliotecas interrompido", e);
+        } finally {
+            pool.shutdown();
+            try {
+                if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                pool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        if (failed.get() > 0) {
+            throw new IOException("Falha ao baixar " + failed.get() + " bibliotecas do total de " + total);
+        }
+    }
+
+    private String getCurrentJavaExecutable() {
+        String javaHome = System.getProperty("java.home");
+        String bin = javaHome + File.separator + "bin" + File.separator + "java";
+        if (PlatformUtil.isWindows()) bin += ".exe";
+        return bin;
     }
 
     /**
@@ -244,7 +361,7 @@ public class VersionManager {
         // Executar instalador
         progress.accept("Executando instalador Forge...", 0.5);
         ProcessBuilder pb = new ProcessBuilder(
-                "java", "-jar", installerJar.getAbsolutePath(), "--installClient"
+                getCurrentJavaExecutable(), "-jar", installerJar.getAbsolutePath(), "--installClient"
         );
         pb.directory(baseDir);
         pb.inheritIO();
@@ -347,7 +464,7 @@ public class VersionManager {
         // Executar instalador (NeoForge usa --install-client com hífens)
         progress.accept("Executando instalador NeoForge...", 0.5);
         ProcessBuilder pb = new ProcessBuilder(
-                "java", "-jar", installerJar.getAbsolutePath(),
+                getCurrentJavaExecutable(), "-jar", installerJar.getAbsolutePath(),
                 "--install-client"
         );
         pb.directory(baseDir);
@@ -414,10 +531,13 @@ public class VersionManager {
         if (!versionsDir.exists()) return Collections.emptyList();
 
         List<String> installed = new ArrayList<>();
-        for (File dir : Objects.requireNonNull(versionsDir.listFiles(File::isDirectory))) {
-            File json = new File(dir, dir.getName() + ".json");
-            if (json.exists()) {
-                installed.add(dir.getName());
+        File[] dirs = versionsDir.listFiles(File::isDirectory);
+        if (dirs != null) {
+            for (File dir : dirs) {
+                File json = new File(dir, dir.getName() + ".json");
+                if (json.exists()) {
+                    installed.add(dir.getName());
+                }
             }
         }
         return installed;

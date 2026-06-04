@@ -22,11 +22,13 @@ public class GameLauncher {
     private final VersionManager versionManager;
     private final DownloadManager downloader = new DownloadManager();
     private final Gson gson = new Gson();
-    private Process gameProcess;
+    private final Set<Process> activeProcesses = java.util.Collections.synchronizedSet(new HashSet<>());
 
     public GameLauncher(File baseDir, VersionManager versionManager) {
         this.baseDir = baseDir;
         this.versionManager = versionManager;
+        // Hook de desligamento para limpar processos órfãos
+        Runtime.getRuntime().addShutdownHook(new Thread(this::kill, "MineLauncher-Cleanup"));
     }
 
     /**
@@ -60,10 +62,17 @@ public class GameLauncher {
         // 6. Montar argumentos
         List<String> args = buildLaunchArgs(detail, profile, account, classpath, javaPath, gameDir);
 
-        // LOG DE DEBUG - mostra cada argumento separado para diagnóstico
+        // LOG DE DEBUG - mostra cada argumento separado para diagnóstico, mas mascare o token
         LOG.info("=== COMANDO COMPLETO ({} args) ===", args.size());
         for (int i = 0; i < args.size(); i++) {
-            LOG.info("[{}] {}", i, args.get(i));
+            String arg = args.get(i);
+            if (i > 0 && (args.get(i - 1).equals("--accessToken") || args.get(i - 1).equals("--auth_session"))) {
+                LOG.info("[{}] ********** (masked)", i);
+            } else if (arg.contains("accessToken=") || arg.contains("session=")) {
+                 LOG.info("[{}] (masked token arg)", i);
+            } else {
+                LOG.info("[{}] {}", i, arg);
+            }
         }
         LOG.info("=== FIM DO COMANDO ===");
 
@@ -75,12 +84,14 @@ public class GameLauncher {
         // Capturar logs
         pb.environment().put("INST_LAUNCHER", "MineLauncher");
 
-        gameProcess = pb.start();
+        Process p = pb.start();
+        activeProcesses.add(p);
+        p.onExit().thenRun(() -> activeProcesses.remove(p));
 
         // 7. Ler output em thread separada
         Thread logThread = new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(gameProcess.getInputStream()))) {
+                    new InputStreamReader(p.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     logCallback.accept(line);
@@ -93,7 +104,7 @@ public class GameLauncher {
         logThread.setName("Minecraft-Log");
         logThread.start();
 
-        LOG.info("Minecraft iniciado (PID: {})", gameProcess.pid());
+        LOG.info("Minecraft iniciado (PID: {})", p.pid());
     }
 
     private String resolveJavaPath(LaunchProfile profile, VersionDetail detail) {
@@ -406,17 +417,25 @@ public class GameLauncher {
                 Enumeration<? extends ZipEntry> entries = zip.entries();
                 while (entries.hasMoreElements()) {
                     ZipEntry entry = entries.nextElement();
-                    String name = entry.getName();
+                    String name = entry.getName().replace('\\', '/');
                     if (name.endsWith(".so") || name.endsWith(".dll") || name.endsWith(".dylib")
                             || name.endsWith(".jnilib")) {
-                        File dest = new File(nativesDir, new File(name).getName());
+                        String fileName = new File(name).getName();
+                        File dest = new File(nativesDir, fileName);
+                        String canonicalDest = dest.getCanonicalPath();
+                        String canonicalNatives = nativesDir.getCanonicalPath();
+                        if (!canonicalDest.startsWith(canonicalNatives + File.separator)) {
+                            throw new IOException("Entrada de native inválida (Zip Slip): " + entry.getName());
+                        }
                         if (!dest.exists()) {
-                            Files.copy(zip.getInputStream(entry), dest.toPath());
+                            try (InputStream is = zip.getInputStream(entry)) {
+                                Files.copy(is, dest.toPath());
+                            }
                         }
                     }
                 }
             } catch (IOException e) {
-                LOG.warn("Erro ao extrair natives de {}", jarFile.getName());
+                LOG.warn("Erro ao extrair natives de {}", jarFile.getName(), e);
             }
         }
 
@@ -478,14 +497,21 @@ public class GameLauncher {
     }
 
     public void kill() {
-        if (gameProcess != null && gameProcess.isAlive()) {
-            gameProcess.destroyForcibly();
-            LOG.info("Processo do jogo finalizado");
+        synchronized (activeProcesses) {
+            for (Process p : activeProcesses) {
+                if (p.isAlive()) {
+                    p.destroyForcibly();
+                }
+            }
+            activeProcesses.clear();
         }
+        LOG.info("Processos do jogo finalizados");
     }
 
     public boolean isRunning() {
-        return gameProcess != null && gameProcess.isAlive();
+        synchronized (activeProcesses) {
+            return activeProcesses.stream().anyMatch(Process::isAlive);
+        }
     }
 
     private String getOSKey() {

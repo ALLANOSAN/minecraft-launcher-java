@@ -26,6 +26,7 @@ public class SettingsManager {
     private final File baseDir;
     private final File settingsFile;
     private final File accountsFile;
+    private final com.minelauncher.utils.ConfigLoader configLoader;
 
     // Configurações
     private String selectedAccountUuid;
@@ -35,6 +36,8 @@ public class SettingsManager {
     private boolean showSnapshots = false;
     private int downloadThreads = 8;
     private String language = "pt_BR";
+    private String curseForgeProxyUrl;
+    private String modrinthApiUrl;
 
     private SettingsManager() {
         String os = System.getProperty("os.name").toLowerCase();
@@ -54,13 +57,17 @@ public class SettingsManager {
         baseDir.mkdirs();
         settingsFile = new File(baseDir, "launcher_settings.json");
         accountsFile = new File(baseDir, "launcher_accounts.json");
+        
+        this.configLoader = new com.minelauncher.utils.ConfigLoader(baseDir.getAbsolutePath());
+        this.curseForgeProxyUrl = configLoader.getProperty("curseforge.proxy.url", "https://minelauncher-proxy.vercel.app/api/cf");
+        this.modrinthApiUrl = configLoader.getProperty("modrinth.api.url", "https://api.modrinth.com/v2");
 
         LOG.info("Diretório base: {}", baseDir.getAbsolutePath());
     }
 
     public static SettingsManager getInstance() { return INSTANCE; }
 
-    public void load() {
+    public synchronized void load() {
         // Carregar configurações
         if (settingsFile.exists()) {
             try {
@@ -73,6 +80,8 @@ public class SettingsManager {
                     showSnapshots = data.showSnapshots;
                     downloadThreads = data.downloadThreads > 0 ? data.downloadThreads : 8;
                     language = data.language != null ? data.language : "pt_BR";
+                    curseForgeProxyUrl = data.curseForgeProxyUrl != null && !data.curseForgeProxyUrl.isBlank() ? data.curseForgeProxyUrl : "https://minelauncher-proxy.vercel.app/api/cf";
+                    modrinthApiUrl = data.modrinthApiUrl != null && !data.modrinthApiUrl.isBlank() ? data.modrinthApiUrl : "https://api.modrinth.com/v2";
                 }
             } catch (Exception e) {
                 LOG.error("Erro ao carregar configurações", e);
@@ -110,6 +119,8 @@ public class SettingsManager {
             data.showSnapshots = showSnapshots;
             data.downloadThreads = downloadThreads;
             data.language = language;
+            data.curseForgeProxyUrl = curseForgeProxyUrl;
+            data.modrinthApiUrl = modrinthApiUrl;
             Files.writeString(settingsFile.toPath(), GSON.toJson(data));
 
             // FIX C-3: cifrar tokens antes de serializar contas.
@@ -175,6 +186,10 @@ public class SettingsManager {
     public void setDownloadThreads(int threads) { this.downloadThreads = threads; save(); }
     public String getLanguage() { return language; }
     public void setLanguage(String lang) { this.language = lang; save(); }
+    public String getCurseForgeProxyUrl() { return curseForgeProxyUrl; }
+    public void setCurseForgeProxyUrl(String url) { this.curseForgeProxyUrl = url; save(); }
+    public String getModrinthApiUrl() { return modrinthApiUrl; }
+    public void setModrinthApiUrl(String url) { this.modrinthApiUrl = url; save(); }
 
     public void addAccount(GameProfile profile) {
         accounts.removeIf(a -> a.getUuid().equals(profile.getUuid()));
@@ -211,5 +226,7 @@ public class SettingsManager {
         public boolean showSnapshots;
         public int downloadThreads;
         public String language;
+        public String curseForgeProxyUrl;
+        public String modrinthApiUrl;
     }
 }

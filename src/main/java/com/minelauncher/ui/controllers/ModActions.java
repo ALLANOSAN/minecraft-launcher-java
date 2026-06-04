@@ -314,49 +314,67 @@ public class ModActions {
 
     public void showInstalled() {
         controller.getModList().getItems().clear();
+        controller.getModList().getItems().add("Buscando instalados...");
         controller.getLastSearchResults().clear();
-        controller.getStatusLabel().setText("Modpacks / perfis instalados");
+        controller.getStatusLabel().setText("Buscando modpacks / perfis instalados...");
 
-        File baseDir = SettingsManager.getInstance().getBaseDir();
-        File modpacksDir = new File(baseDir, "modpacks");
+        new Thread(() -> {
+            try {
+                File baseDir = SettingsManager.getInstance().getBaseDir();
+                File modpacksDir = new File(baseDir, "modpacks");
 
-        // 1) Lista subdiretórios de modpacks/ (modpacks reais baixados)
-        if (modpacksDir.exists() && modpacksDir.listFiles() != null) {
-            for (File dir : modpacksDir.listFiles(File::isDirectory)) {
-                String displayName = com.minelauncher.utils.ModpackNameResolver.resolve(
-                        dir, profileManager != null ? profileManager.getProfiles() : null);
-                boolean dirExists = true;
-                controller.getModList().getItems().add("[Modpack] " + displayName
-                        + (dirExists ? "" : "  (sem pasta)"));
-                ModInfo info = new ModInfo(displayName, dir.getName(), "installed");
-                controller.getLastSearchResults().add(info);
+                List<String> displayNames = new ArrayList<>();
+                List<ModInfo> results = new ArrayList<>();
+
+                // 1) Lista subdiretórios de modpacks/ (modpacks reais baixados)
+                if (modpacksDir.exists() && modpacksDir.listFiles() != null) {
+                    for (File dir : modpacksDir.listFiles(File::isDirectory)) {
+                        String displayName = com.minelauncher.utils.ModpackNameResolver.resolve(
+                                dir, profileManager != null ? profileManager.getProfiles() : null);
+                        displayNames.add("[Modpack] " + displayName);
+                        ModInfo info = new ModInfo(displayName, dir.getName(), "installed");
+                        results.add(info);
+                    }
+                }
+
+                // 2) Lista perfis que ainda não apareceram como [Modpack].
+                if (profileManager != null) {
+                    String modpacksAbs = modpacksDir.getAbsolutePath();
+                    for (LaunchProfile p : profileManager.getProfiles()) {
+                        String gd = p.getGameDir();
+                        File gameDir = (gd == null || gd.isBlank()) ? null : new File(gd);
+                        boolean alreadyListed = gameDir != null
+                                && gameDir.exists()
+                                && gameDir.getAbsolutePath().startsWith(modpacksAbs);
+                        if (alreadyListed) continue;
+                        String suffix = (gameDir != null && gameDir.exists()) ? "" : "  (sem pasta)";
+                        displayNames.add("[Perfil] " + p.getName() + suffix);
+                        ModInfo info = new ModInfo(p.getName(), p.getName(), "profile");
+                        results.add(info);
+                    }
+                }
+
+                Platform.runLater(() -> {
+                    controller.getModList().getItems().clear();
+                    controller.getLastSearchResults().clear();
+                    controller.getLastSearchResults().addAll(results);
+                    
+                    if (displayNames.isEmpty()) {
+                        controller.getModList().getItems().add("Nenhum modpack instalado");
+                    } else {
+                        controller.getModList().getItems().addAll(displayNames);
+                    }
+                    controller.getStatusLabel().setText("Modpacks / perfis instalados");
+                });
+
+            } catch (Exception e) {
+                LOG.error("Erro ao listar instalados", e);
+                Platform.runLater(() -> {
+                    controller.getModList().getItems().clear();
+                    controller.getStatusLabel().setText("Erro ao listar: " + e.getMessage());
+                });
             }
-        }
-
-        // 2) Lista perfis que ainda não apareceram como [Modpack].
-        //    Só pula se o gameDir EXISTE e está dentro de modpacks/
-        //    (porque aí ele já foi listado no passo 1).
-        //    Se o gameDir está em modpacks/ mas NÃO existe, ainda
-        //    precisa aparecer aqui para que o usuário possa removê-lo.
-        if (profileManager != null) {
-            String modpacksAbs = modpacksDir.getAbsolutePath();
-            for (LaunchProfile p : profileManager.getProfiles()) {
-                String gd = p.getGameDir();
-                File gameDir = (gd == null || gd.isBlank()) ? null : new File(gd);
-                boolean alreadyListed = gameDir != null
-                        && gameDir.exists()
-                        && gameDir.getAbsolutePath().startsWith(modpacksAbs);
-                if (alreadyListed) continue;
-                String suffix = (gameDir != null && gameDir.exists()) ? "" : "  (sem pasta)";
-                controller.getModList().getItems().add("[Perfil] " + p.getName() + suffix);
-                ModInfo info = new ModInfo(p.getName(), p.getName(), "profile");
-                controller.getLastSearchResults().add(info);
-            }
-        }
-
-        if (controller.getModList().getItems().isEmpty()) {
-            controller.getModList().getItems().add("Nenhum modpack instalado");
-        }
+        }).start();
     }
 
     /**

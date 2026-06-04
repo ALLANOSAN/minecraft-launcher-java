@@ -113,7 +113,6 @@ public class JavaDetector {
                 "C:\\Program Files\\Java",
                 "C:\\Program Files (x86)\\Java",
                 "C:\\Program Files\\Eclipse Adoptium",
-                "C:\\Program Files\\Microsoft\\jdk-*",
                 "C:\\Program Files\\AdoptOpenJDK",
                 "C:\\Program Files\\Zulu",
         };
@@ -121,15 +120,30 @@ public class JavaDetector {
         for (String basePath : paths) {
             File dir = new File(basePath);
             if (dir.exists() && dir.isDirectory()) {
-                for (File sub : Objects.requireNonNull(dir.listFiles())) {
+                File[] subs = dir.listFiles();
+                if (subs != null) {
+                    for (File sub : subs) {
+                        addIfValid(sub.getAbsolutePath(), installs);
+                    }
+                }
+            }
+        }
+
+        // Microsoft JDKs com wildcard
+        File microsoftDir = new File("C:\\Program Files\\Microsoft");
+        if (microsoftDir.exists() && microsoftDir.isDirectory()) {
+            File[] subs = microsoftDir.listFiles((dir, name) -> name.startsWith("jdk-"));
+            if (subs != null) {
+                for (File sub : subs) {
                     addIfValid(sub.getAbsolutePath(), installs);
                 }
             }
         }
 
         // Via registry (PowerShell)
+        Process p = null;
         try {
-            Process p = Runtime.getRuntime().exec(new String[]{
+            p = Runtime.getRuntime().exec(new String[]{
                     "powershell", "-Command",
                     "Get-ChildItem 'HKLM:\\SOFTWARE\\JavaSoft\\Java Development Kit' -ErrorAction SilentlyContinue | " +
                             "ForEach-Object { $_.GetValue('JavaHome') }"
@@ -141,7 +155,12 @@ public class JavaDetector {
                     addIfValid(line.trim(), installs);
                 }
             }
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            if (p != null) p.destroyForcibly();
         } catch (Exception e) {
             LOG.debug("Não foi possível ler registry do Java");
         }
@@ -156,9 +175,12 @@ public class JavaDetector {
 
         for (String basePath : paths) {
             File dir = new File(basePath);
-            if (dir.exists()) {
-                for (File sub : Objects.requireNonNull(dir.listFiles())) {
-                    addIfValid(sub.getAbsolutePath() + "/Contents/Home", installs);
+            if (dir.exists() && dir.isDirectory()) {
+                File[] subs = dir.listFiles();
+                if (subs != null) {
+                    for (File sub : subs) {
+                        addIfValid(sub.getAbsolutePath() + "/Contents/Home", installs);
+                    }
                 }
             }
         }
@@ -174,26 +196,35 @@ public class JavaDetector {
 
         for (String basePath : paths) {
             File dir = new File(basePath);
-            if (dir.exists()) {
-                for (File sub : Objects.requireNonNull(dir.listFiles())) {
-                    addIfValid(sub.getAbsolutePath(), installs);
+            if (dir.exists() && dir.isDirectory()) {
+                File[] subs = dir.listFiles();
+                if (subs != null) {
+                    for (File sub : subs) {
+                        addIfValid(sub.getAbsolutePath(), installs);
+                    }
                 }
             }
         }
 
         // which java
+        Process pWhich = null;
         try {
-            Process pWhich = Runtime.getRuntime().exec(new String[]{"which", "java"});
+            pWhich = Runtime.getRuntime().exec(new String[]{"which", "java"});
             String line;
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(pWhich.getInputStream()))) {
                 line = reader.readLine();
             }
-            pWhich.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!pWhich.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                pWhich.destroyForcibly();
+            }
             if (line != null) {
                 File resolved = new File(line.trim()).getCanonicalFile();
                 addIfValid(resolved.getParentFile().getParentFile().getAbsolutePath(), installs);
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            if (pWhich != null) pWhich.destroyForcibly();
         } catch (Exception e) {
             LOG.debug("which java falhou");
         }
@@ -211,16 +242,18 @@ public class JavaDetector {
     }
 
     private static int getJavaVersion(String javaPath) {
-        // Process é AutoCloseable desde Java 7 — try-with-resources chama destroy()
-        // automaticamente se o processo ainda estiver vivo no fim do bloco.
+        Process p = null;
         try {
-            Process p = Runtime.getRuntime().exec(new String[]{javaPath, "-version"});
+            p = Runtime.getRuntime().exec(new String[]{javaPath, "-version"});
             String line;
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(p.getErrorStream()))) {
                 line = reader.readLine();
             }
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                return -1;
+            }
             if (line == null) return -1;
 
             Pattern pattern = Pattern.compile("\"(\\d+)(?:\\.(\\d+))?");
@@ -234,6 +267,9 @@ public class JavaDetector {
                 }
                 return major;
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            if (p != null) p.destroyForcibly();
         } catch (Exception e) {
             LOG.debug("Erro ao detectar versão do Java: {}", javaPath);
         }

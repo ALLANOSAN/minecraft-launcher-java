@@ -19,17 +19,20 @@ public class ShortcutManager {
 
     public static void createShortcut() {
         String os = System.getProperty("os.name").toLowerCase();
-        try {
-            if (os.contains("win")) {
-                createWindowsShortcut();
-            } else if (os.contains("mac")) {
-                createMacShortcut();
-            } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
-                createLinuxShortcut();
+        // Executa de forma assíncrona em background para evitar travar a UI thread no startup
+        new Thread(() -> {
+            try {
+                if (os.contains("win")) {
+                    createWindowsShortcut();
+                } else if (os.contains("mac")) {
+                    createMacShortcut();
+                } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
+                    createLinuxShortcut();
+                }
+            } catch (Exception e) {
+                LOG.error("Falha ao criar atalho para o OS: {}", os, e);
             }
-        } catch (Exception e) {
-            LOG.error("Falha ao criar atalho para o OS: {}", os, e);
-        }
+        }, "Shortcut-Creator").start();
     }
 
     private static void createLinuxShortcut() throws IOException {
@@ -53,9 +56,7 @@ public class ShortcutManager {
                 "Type=Application\n" +
                 "Categories=Game;\n";
 
-        try (FileWriter writer = new FileWriter(desktopFile)) {
-            writer.write(content);
-        }
+        Files.writeString(desktopFile.toPath(), content, java.nio.charset.StandardCharsets.UTF_8);
 
         // Tornar executável
         try {
@@ -106,17 +107,23 @@ public class ShortcutManager {
                     "powershell", "-ExecutionPolicy", "Bypass", "-File", scriptFile.toString());
             pb.redirectErrorStream(true);
             Process p = pb.start();
-            try (var reader = new java.io.BufferedReader(
-                    new InputStreamReader(p.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) LOG.debug("ps: {}", line);
-            }
-            // FIX H-12: timeout 30s evita que powershell travado segure o shutdown.
-            if (!p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
+            try {
+                try (var reader = new java.io.BufferedReader(
+                        new InputStreamReader(p.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) LOG.debug("ps: {}", line);
+                }
+                // FIX H-12: timeout 30s evita que powershell travado segure o shutdown.
+                if (!p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                    p.destroyForcibly();
+                    LOG.warn("PowerShell não respondeu em 30s — forçando encerramento");
+                } else if (p.exitValue() != 0) {
+                    LOG.warn("PowerShell exit code {} ao criar atalho", p.exitValue());
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
                 p.destroyForcibly();
-                LOG.warn("PowerShell não respondeu em 30s — forçando encerramento");
-            } else if (p.exitValue() != 0) {
-                LOG.warn("PowerShell exit code {} ao criar atalho", p.exitValue());
+                LOG.warn("PowerShell interrompido ao criar atalho");
             }
         } finally {
             try { Files.deleteIfExists(scriptFile); } catch (IOException ignored) { /* best effort */ }
