@@ -5,6 +5,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.minelauncher.models.VersionDetail;
 import com.minelauncher.models.VersionInfo;
+import com.minelauncher.utils.FileUtils;
+import com.minelauncher.utils.PlatformUtil;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.slf4j.Logger;
@@ -148,7 +150,7 @@ public class VersionManager {
             downloader.download(client.getUrl(), clientJar, client.getSha1(),
                     (downloaded, total) -> {
                         double pct = total > 0 ? (double) downloaded / total : 0;
-                        progress.accept("Baixando cliente... " + formatBytes(downloaded), 0.05 + pct * 0.15);
+                        progress.accept("Baixando cliente... " + FileUtils.formatBytes(downloaded), 0.05 + pct * 0.15);
                     });
         }
 
@@ -422,16 +424,6 @@ public class VersionManager {
     }
 
     private String getOSKey() {
-        String os = System.getProperty("os.name").toLowerCase();
-        if (os.contains("win")) return "windows";
-        if (os.contains("mac")) return "osx";
-        return "linux";
-    }
-
-    private String formatBytes(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024 * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
-        return String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024));
+        return PlatformUtil.getOSKey();
     }
 }

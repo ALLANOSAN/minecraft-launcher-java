@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.minelauncher.models.GameProfile;
 import com.minelauncher.models.LaunchProfile;
 import com.minelauncher.models.VersionDetail;
+import com.minelauncher.utils.PlatformUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -488,9 +489,6 @@ public class GameLauncher {
     }
 
     private String getOSKey() {
-        String os = System.getProperty("os.name").toLowerCase();
-        if (os.contains("win")) return "windows";
-        if (os.contains("mac")) return "osx";
-        return "linux";
+        return PlatformUtil.getOSKey();
     }
 }
