@@ -988,9 +988,12 @@ public class MainController implements Initializable {
     }
 
     private void renderNetLabel() {
-        if (statusNetLabel == null)
-            return;
-        statusNetLabel.setText(netOnline ? "ONLINE" : "OFFLINE");
+        if (statusNetLabel == null) return;
+        if (statusBarUpdater != null) {
+            statusBarUpdater.updateNetLabel(netOnline);
+        } else {
+            statusNetLabel.setText(netOnline ? "ONLINE" : "OFFLINE");
+        }
         swapClass(statusNetLabel, STATUS_VARIANTS, netOnline ? "status-text-accent" : "status-text-danger");
     }
 

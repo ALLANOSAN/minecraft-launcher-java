@@ -60,13 +60,12 @@ public class MineLauncher extends Application {
 
             stage.show();
 
-            // Debug — ver tamanho real da janela
-            System.out.println("Stage width: " + stage.getWidth());
-            System.out.println("Stage height: " + stage.getHeight());
-            System.out.println("Stage X: " + stage.getX());
-            System.out.println("Stage Y: " + stage.getY());
-            System.out.println("Screen width: " + javafx.stage.Screen.getPrimary().getVisualBounds().getWidth());
-            System.out.println("Screen height: " + javafx.stage.Screen.getPrimary().getVisualBounds().getHeight());
+            // Debug — antes era System.out.println a cada startup. Movido
+            // para LOG.debug, só aparece com nível DEBUG habilitado.
+            LOG.debug("Stage size: {}x{} at ({}, {})",
+                    stage.getWidth(), stage.getHeight(), stage.getX(), stage.getY());
+            javafx.geometry.Rectangle2D bounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+            LOG.debug("Screen size: {}x{}", bounds.getWidth(), bounds.getHeight());
 
             LOG.info("MineLauncher iniciado com sucesso");
         } catch (IOException e) {
