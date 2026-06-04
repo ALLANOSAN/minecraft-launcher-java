@@ -1,15 +1,11 @@
 // MineLauncher — CurseForge API Proxy
-// Serverless function que injeta a chave da API CurseForge em cada requisição.
-// Cliente (launcher) fala com ESTE proxy; o proxy fala com CurseForge.
+// Função única + rewrites em vercel.json fazem o roteamento.
+// (anteriormente era catch-all [...path].js, mas tinha bug de routing multi-segmento)
 //
-// Por que existe: hardcodar a chave no JAR vaza no git, no JAR extraível, em
-// forks, em CI logs. Aqui a chave fica criptografada nos servers da Vercel.
-//
-// Endpoints:
+// Endpoints (via rewrite):
 //   GET  /api/cf/_health       -> { ok, version, hasKey }
 //   ANY  /api/cf/<path>        -> forward pra https://api.curseforge.com/v1/<path>
 
-// FORÇA runtime Node.js (evita cair no Edge runtime, que tem APIs diferentes)
 export const config = {
   runtime: 'nodejs',
 };
@@ -67,17 +63,38 @@ function applyCors(res) {
   } catch (_) { /* ignore */ }
 }
 
-// =============== Path parsing (robusto) ===============
-// Extrai o path depois de /api/cf/ a partir de req.url.
-// Mais confiável que req.query.path em alguns runtimes Vercel.
-function extractPathFromUrl(reqUrl) {
-  if (!reqUrl) return '';
+// =============== Path extraction ===============
+// Tenta pegar a URL original de várias fontes (Vercel muda o header conforme versão)
+function getOriginalUrl(req) {
+  const h = req.headers || {};
+  return (
+    h['x-vercel-original-url'] ||
+    h['x-original-url'] ||
+    h['x-vercel-rewrite-destination'] ||
+    h['x-forwarded-uri'] ||
+    req.url ||
+    '/'
+  );
+}
+
+// Extrai o path depois de /api/cf/ a partir da URL (com ou sem host, com ou sem query)
+function extractPathFromUrl(rawUrl) {
+  if (!rawUrl) return '';
+  let url = String(rawUrl);
+  // se tem scheme+host (URL completa tipo "https://foo.com/api/cf/x"), remove o scheme+host
+  url = url.replace(/^https?:\/\/[^/]+/, '');
   // remove query string
-  const pathOnly = String(reqUrl).split('?')[0];
+  url = url.split('?')[0];
   // remove prefixo /api/cf (com ou sem barra no final)
-  const stripped = pathOnly.replace(/^\/api\/cf\/?/, '');
-  // normaliza barras e remove trailing slash
+  const stripped = url.replace(/^\/api\/cf\/?/, '');
   return stripped.replace(/^\/+/, '').replace(/\/+$/, '');
+}
+
+function extractQueryFromUrl(rawUrl) {
+  if (!rawUrl) return '';
+  const url = String(rawUrl);
+  const idx = url.indexOf('?');
+  return idx >= 0 ? url.substring(idx) : '';
 }
 
 // =============== Handler principal ===============
@@ -90,11 +107,19 @@ export default async function handler(req, res) {
       return res.status(204).end();
     }
 
-    // Parse path do req.url (fonte confiável)
-    const pathStr = extractPathFromUrl(req.url);
+    // Tenta pegar URL original via headers (Vercel rewrite)
+    // Se não conseguir, usa req.url (que será o destination da rewrite, tipo /api/cf-proxy)
+    const originalUrl = getOriginalUrl(req);
+    const originalPath = extractPathFromUrl(originalUrl);
+    const pathStr = originalPath;
 
-    // Log SEMPRE — pra debug, aparece no Vercel function logs
-    console.log(`[cf-proxy] HIT method=${req.method} url=${req.url} path="${pathStr}"`);
+    // Log SEMPRE pra debug
+    console.log(
+      `[cf-proxy] HIT method=${req.method} ` +
+      `req.url=${req.url} ` +
+      `original=${originalUrl} ` +
+      `path="${pathStr}"`
+    );
 
     // Health check — não toca upstream, não conta no rate limit
     if (pathStr === '_health' || pathStr === '_ping') {
@@ -127,10 +152,10 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'proxy_misconfigured' });
     }
 
-    // Constrói URL alvo preservando path + querystring do cliente
-    const reqUrl = (req && req.url) ? String(req.url) : '/';
-    // remove só o prefixo /api/cf, mantém query string
-    const tail = reqUrl.replace(/^\/api\/cf/, '') || '/';
+    // Constrói URL alvo: /<path>?<query>
+    const queryStr = extractQueryFromUrl(originalUrl) ||
+                     (req.url && req.url.includes('?') ? '?' + req.url.split('?').slice(1).join('?') : '');
+    const tail = (pathStr ? '/' + pathStr : '') + queryStr;
     const targetUrl = `${CF_BASE}${tail}`;
 
     // Headers: bloqueia auth do cliente, injeta key server-side

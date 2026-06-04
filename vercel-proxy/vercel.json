@@ -1,8 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "api/cf/[...path].js": {
-      "maxDuration": 10
+  "rewrites": [
+    {
+      "source": "/api/cf/:path*",
+      "destination": "/api/cf-proxy"
     }
-  }
+  ]
 }
