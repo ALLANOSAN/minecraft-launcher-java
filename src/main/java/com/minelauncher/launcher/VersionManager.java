@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.minelauncher.models.VersionDetail;
 import com.minelauncher.models.VersionInfo;
-import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.slf4j.Logger;
@@ -43,9 +42,10 @@ public class VersionManager {
         if (cachedManifest != null) return cachedManifest;
 
         Request request = new Request.Builder().url(VERSION_MANIFEST_URL).build();
-        try (Response response = new OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS).build()
-                .newCall(request).execute()) {
+        // FIX H-5: usa singleton HttpClient em vez de criar novo OkHttpClient
+        // a cada chamada. Antes criava 4 instâncias durante installVersion(),
+        // cada uma com seu próprio thread pool, connection pool e DNS cache.
+        try (Response response = HttpClient.getInstance().newCall(request).execute()) {
 
             String json = response.body().string();
             cachedManifest = gson.fromJson(json, VersionInfo.VersionManifest.class);
@@ -108,9 +108,8 @@ public class VersionManager {
         }
 
         Request request = new Request.Builder().url(versionInfo.getUrl()).build();
-        try (Response response = new OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS).build()
-                .newCall(request).execute()) {
+        // FIX H-5: singleton HttpClient
+        try (Response response = HttpClient.getInstance().newCall(request).execute()) {
 
             String json = response.body().string();
             cached.getParentFile().mkdirs();
@@ -277,9 +276,8 @@ public class VersionManager {
                 .build();
 
         String loaderVersion;
-        try (Response response = new OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS).build()
-                .newCall(request).execute()) {
+        // FIX H-5: singleton HttpClient
+        try (Response response = HttpClient.getInstance().newCall(request).execute()) {
             String json = response.body().string();
             loaderVersion = JsonParser.parseString(json).getAsJsonArray()
                     .get(0).getAsJsonObject()
@@ -310,9 +308,8 @@ public class VersionManager {
                 .build();
 
         String loaderVersion;
-        try (Response response = new OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS).build()
-                .newCall(request).execute()) {
+        // FIX H-5: singleton HttpClient
+        try (Response response = HttpClient.getInstance().newCall(request).execute()) {
             String json = response.body().string();
             loaderVersion = JsonParser.parseString(json).getAsJsonArray()
                     .get(0).getAsJsonObject()

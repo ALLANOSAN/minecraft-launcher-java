@@ -153,7 +153,7 @@ public class ModActions {
                         });
                         return;
                     }
-                    controller.deleteDirectory(existingDir);
+                    com.minelauncher.utils.FileUtils.deleteDirectory(existingDir);
                 }
             }
 
@@ -288,7 +288,7 @@ public class ModActions {
             showConfirmDialog("Remover instalação", "Remover \"" + displayName + "\"?", bodyStr, ok -> {
                 if (ok) {
                     if (finalTargetDir != null && finalTargetDir.exists()) {
-                        controller.deleteDirectory(finalTargetDir);
+                        com.minelauncher.utils.FileUtils.deleteDirectory(finalTargetDir);
                     }
                     profileManager.removeProfile(finalDisplayName);
                     Platform.runLater(() -> {
@@ -486,7 +486,7 @@ public class ModActions {
             alert.setHeaderText("Já existe um modpack com esse nome:");
             alert.setContentText(modpackDir.getAbsolutePath());
             if (alert.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
-            controller.deleteDirectory(modpackDir);
+            com.minelauncher.utils.FileUtils.deleteDirectory(modpackDir);
         }
 
         controller.getStatusLabel().setText("Importando modpack...");

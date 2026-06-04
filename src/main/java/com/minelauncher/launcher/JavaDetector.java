@@ -128,23 +128,22 @@ public class JavaDetector {
         }
 
         // Via registry (PowerShell)
-        Process p = null;
         try {
-            p = Runtime.getRuntime().exec(new String[]{
+            Process p = Runtime.getRuntime().exec(new String[]{
                     "powershell", "-Command",
                     "Get-ChildItem 'HKLM:\\SOFTWARE\\JavaSoft\\Java Development Kit' -ErrorAction SilentlyContinue | " +
                             "ForEach-Object { $_.GetValue('JavaHome') }"
             });
-            BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                addIfValid(line.trim(), installs);
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    addIfValid(line.trim(), installs);
+                }
             }
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
         } catch (Exception e) {
             LOG.debug("Não foi possível ler registry do Java");
-        } finally {
-            if (p != null) p.destroy();
         }
     }
 
@@ -183,11 +182,13 @@ public class JavaDetector {
         }
 
         // which java
-        Process pWhich = null;
         try {
-            pWhich = Runtime.getRuntime().exec(new String[]{"which", "java"});
-            BufferedReader reader = new BufferedReader(new InputStreamReader(pWhich.getInputStream()));
-            String line = reader.readLine();
+            Process pWhich = Runtime.getRuntime().exec(new String[]{"which", "java"});
+            String line;
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(pWhich.getInputStream()))) {
+                line = reader.readLine();
+            }
             pWhich.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
             if (line != null) {
                 File resolved = new File(line.trim()).getCanonicalFile();
@@ -195,8 +196,6 @@ public class JavaDetector {
             }
         } catch (Exception e) {
             LOG.debug("which java falhou");
-        } finally {
-            if (pWhich != null) pWhich.destroy();
         }
     }
 
@@ -212,11 +211,15 @@ public class JavaDetector {
     }
 
     private static int getJavaVersion(String javaPath) {
-        Process p = null;
+        // Process é AutoCloseable desde Java 7 — try-with-resources chama destroy()
+        // automaticamente se o processo ainda estiver vivo no fim do bloco.
         try {
-            p = Runtime.getRuntime().exec(new String[]{javaPath, "-version"});
-            BufferedReader reader = new BufferedReader(new InputStreamReader(p.getErrorStream()));
-            String line = reader.readLine();
+            Process p = Runtime.getRuntime().exec(new String[]{javaPath, "-version"});
+            String line;
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(p.getErrorStream()))) {
+                line = reader.readLine();
+            }
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
             if (line == null) return -1;
 
@@ -233,8 +236,6 @@ public class JavaDetector {
             }
         } catch (Exception e) {
             LOG.debug("Erro ao detectar versão do Java: {}", javaPath);
-        } finally {
-            if (p != null) p.destroy();
         }
         return -1;
     }

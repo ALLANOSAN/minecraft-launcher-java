@@ -463,7 +463,7 @@ public class ModManager {
         File zipFile = new File(modpackDir, fileName);
         downloader.download(downloadUrl, zipFile, null, (downloaded, total) -> {
             double pct = total > 0 ? (double) downloaded / total : 0;
-            progress.accept("Baixando modpack... " + formatBytes(downloaded), 0.1 + pct * 0.5);
+            progress.accept("Baixando modpack... " + com.minelauncher.utils.FileUtils.formatBytes(downloaded), 0.1 + pct * 0.5);
         });
         LOG.info("Download concluído: {} bytes", zipFile.length());
 
@@ -687,7 +687,7 @@ public class ModManager {
         File mrpackFile = new File(modpackDir, fileName);
         downloader.download(downloadUrl, mrpackFile, null, (downloaded, total) -> {
             double pct = total > 0 ? (double) downloaded / total : 0;
-            progress.accept("Baixando modpack... " + formatBytes(downloaded), 0.1 + pct * 0.4);
+            progress.accept("Baixando modpack... " + com.minelauncher.utils.FileUtils.formatBytes(downloaded), 0.1 + pct * 0.4);
         });
         LOG.info("Download concluído: {} bytes", mrpackFile.length());
 
@@ -921,28 +921,13 @@ public class ModManager {
     }
 
     /**
-     * Remove diretório recursivamente
+     * Remove diretório recursivamente (delegado para FileUtils).
      */
     private void deleteDirectory(File dir) {
-        if (dir.isDirectory()) {
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File f : files) {
-                    deleteDirectory(f);
-                }
-            }
-        }
-        dir.delete();
+        com.minelauncher.utils.FileUtils.deleteDirectory(dir);
     }
 
     private String sanitizeName(String name) {
         return name.replaceAll("[^a-zA-Z0-9\\s\\-]", "").replaceAll("\\s+", "_");
-    }
-
-    private String formatBytes(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024 * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
-        return String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024));
     }
 }

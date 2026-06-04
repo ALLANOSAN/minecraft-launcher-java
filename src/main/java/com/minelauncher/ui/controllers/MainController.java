@@ -1026,7 +1026,8 @@ public class MainController implements Initializable {
         Runtime rt = Runtime.getRuntime();
         long usedBytes = rt.totalMemory() - rt.freeMemory();
         long maxBytes = rt.maxMemory();
-        statusRamLabel.setText(formatBytes(usedBytes) + " / " + formatBytes(maxBytes));
+        statusRamLabel.setText(com.minelauncher.utils.FileUtils.formatBytes(usedBytes) +
+                " / " + com.minelauncher.utils.FileUtils.formatBytes(maxBytes));
     }
 
     private void updateJavaInfo() {
@@ -1134,18 +1135,6 @@ public class MainController implements Initializable {
         if (target != null && !l.getStyleClass().contains(target)) {
             l.getStyleClass().add(target);
         }
-    }
-
-    private static String formatBytes(long bytes) {
-        if (bytes < 1024L * 1024L) {
-            return (bytes / 1024L) + " KB";
-        }
-        double mb = bytes / (1024.0 * 1024.0);
-        if (mb < 1024.0) {
-            return (mb < 10 ? String.format("%.1f", mb) : String.format("%.0f", mb)) + " MB";
-        }
-        double gb = mb / 1024.0;
-        return (gb < 10 ? String.format("%.2f", gb) : String.format("%.1f", gb)) + " GB";
     }
 
     public void stopLiveUpdates() {
@@ -1703,17 +1692,6 @@ public class MainController implements Initializable {
         modActions.importModpack();
     }
 
-    public void deleteDirectory(File dir) {
-        if (dir.isDirectory()) {
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File f : files)
-                    deleteDirectory(f);
-            }
-        }
-        dir.delete();
-    }
-
     @FXML
     private void showInstalled() {
         modActions.showInstalled();
@@ -1739,7 +1717,7 @@ public class MainController implements Initializable {
                         java.io.File baseDir = com.minelauncher.settings.SettingsManager.getInstance().getBaseDir();
                         java.io.File modpackDir = new java.io.File(baseDir, "modpacks/" + name);
                         if (modpackDir.exists()) {
-                            deleteDirectory(modpackDir);
+                            com.minelauncher.utils.FileUtils.deleteDirectory(modpackDir);
                         }
 
                         // Remove o perfil

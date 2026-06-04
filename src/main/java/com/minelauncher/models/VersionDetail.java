@@ -48,10 +48,10 @@ public class VersionDetail {
         /** Retorna os valores do argumento como lista de strings. */
         public List<String> getValues() {
             if (value == null) return java.util.Collections.emptyList();
-            if (value instanceof String) return java.util.Collections.singletonList((String) value);
-            if (value instanceof List) {
-                List<String> result = new java.util.ArrayList<>();
-                for (Object v : (List<?>) value) result.add(v.toString());
+            if (value instanceof String s) return java.util.Collections.singletonList(s);
+            if (value instanceof List<?> list) {
+                List<String> result = new java.util.ArrayList<>(list.size());
+                for (Object v : list) result.add(v.toString());
                 return result;
             }
             return java.util.Collections.singletonList(value.toString());
@@ -149,8 +149,8 @@ public class VersionDetail {
             List<String> result = new java.util.ArrayList<>();
             if (raw == null) return result;
             for (Object entry : raw) {
-                if (entry instanceof String) {
-                    result.add((String) entry);
+                if (entry instanceof String s) {
+                    result.add(s);
                 } else {
                     // Gson desserializa objetos JSON como LinkedTreeMap
                     try {
