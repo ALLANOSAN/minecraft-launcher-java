@@ -49,9 +49,10 @@ function maybeCleanup() {
 
 function clientIp(req) {
   try {
-    const xff = req.headers && req.headers['x-forwarded-for'];
+    const h = req.headers || {};
+    const xff = h['x-forwarded-for'];
     if (xff) return String(xff).split(',')[0].trim();
-    if (req.headers && req.headers['x-real-ip']) return req.headers['x-real-ip'];
+    if (h['x-real-ip']) return h['x-real-ip'];
     if (req.socket && req.socket.remoteAddress) return req.socket.remoteAddress;
   } catch (_) { /* fallthrough */ }
   return 'unknown';
@@ -63,11 +64,25 @@ function applyCors(res) {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, User-Agent');
     res.setHeader('Access-Control-Max-Age', '86400');
-  } catch (_) { /* some responses (e.g. Edge) don't allow setHeader early */ }
+  } catch (_) { /* ignore */ }
+}
+
+// =============== Path parsing (robusto) ===============
+// Extrai o path depois de /api/cf/ a partir de req.url.
+// Mais confiável que req.query.path em alguns runtimes Vercel.
+function extractPathFromUrl(reqUrl) {
+  if (!reqUrl) return '';
+  // remove query string
+  const pathOnly = String(reqUrl).split('?')[0];
+  // remove prefixo /api/cf (com ou sem barra no final)
+  const stripped = pathOnly.replace(/^\/api\/cf\/?/, '');
+  // normaliza barras e remove trailing slash
+  return stripped.replace(/^\/+/, '').replace(/\/+$/, '');
 }
 
 // =============== Handler principal ===============
 export default async function handler(req, res) {
+  const startTs = Date.now();
   try {
     applyCors();
 
@@ -75,16 +90,16 @@ export default async function handler(req, res) {
       return res.status(204).end();
     }
 
-    // Defensivo: req.query pode ser undefined em alguns runtimes
-    const query = (req && req.query) || {};
-    const pathRaw = query.path;
-    const pathStr = Array.isArray(pathRaw)
-      ? pathRaw.join('/')
-      : (typeof pathRaw === 'string' ? pathRaw : '');
+    // Parse path do req.url (fonte confiável)
+    const pathStr = extractPathFromUrl(req.url);
+
+    // Log SEMPRE — pra debug, aparece no Vercel function logs
+    console.log(`[cf-proxy] HIT method=${req.method} url=${req.url} path="${pathStr}"`);
 
     // Health check — não toca upstream, não conta no rate limit
     if (pathStr === '_health' || pathStr === '_ping') {
       const hasKey = !!process.env.CURSEFORGE_API_KEY;
+      console.log(`[cf-proxy] health check -> hasKey=${hasKey}`);
       return res.status(hasKey ? 200 : 503).json({
         ok: hasKey,
         version: VERSION,
@@ -113,9 +128,8 @@ export default async function handler(req, res) {
     }
 
     // Constrói URL alvo preservando path + querystring do cliente
-    // req.url = "/api/cf/mods/123?gameId=432"
-    // tail    = "/mods/123?gameId=432"
     const reqUrl = (req && req.url) ? String(req.url) : '/';
+    // remove só o prefixo /api/cf, mantém query string
     const tail = reqUrl.replace(/^\/api\/cf/, '') || '/';
     const targetUrl = `${CF_BASE}${tail}`;
 
@@ -124,8 +138,6 @@ export default async function handler(req, res) {
     const fwdHeaders = {
       'x-api-key': apiKey,
       'Accept': headers['accept'] || 'application/json',
-      // Passa o User-Agent do cliente (ex: "MineLauncher/1.0") se vier,
-      // senão identifica o proxy. CurseForge prefere app identificado.
       'User-Agent': headers['user-agent'] || `MineLauncher-Proxy/${VERSION}`,
     };
     if (headers['content-type']) {
@@ -141,7 +153,6 @@ export default async function handler(req, res) {
     }
 
     // Forward
-    const start = Date.now();
     let upstream;
     try {
       upstream = await fetch(targetUrl, fetchOpts);
@@ -151,9 +162,8 @@ export default async function handler(req, res) {
     }
 
     const body = await upstream.text();
-    const elapsed = Date.now() - start;
+    const elapsed = Date.now() - startTs;
 
-    // Log: método, path, status, latência, IP. NÃO loga body nem headers.
     console.log(`[cf-proxy] ${req.method} /${pathStr} -> ${upstream.status} (${elapsed}ms) ip=${ip}`);
 
     res.status(upstream.status);
@@ -162,15 +172,12 @@ export default async function handler(req, res) {
     return res.send(body);
 
   } catch (err) {
-    // Última linha de defesa: loga o erro real e retorna 500 com mensagem
     console.error(`[cf-proxy] FATAL: ${err && err.stack ? err.stack : err}`);
     try {
       return res.status(500).json({
         error: 'internal_error',
         message: (err && err.message) ? err.message : String(err),
       });
-    } catch (_) {
-      // res já foi enviado; não tem o que fazer
-    }
+    } catch (_) { /* res já enviado */ }
   }
 }
