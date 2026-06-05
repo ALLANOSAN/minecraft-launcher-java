@@ -38,6 +38,8 @@ public class SettingsManager {
     private String language = "pt_BR";
     private String curseForgeProxyUrl;
     private String modrinthApiUrl;
+    private String errorReportUrl;
+    private String backupPath;
 
     private SettingsManager() {
         String os = System.getProperty("os.name").toLowerCase();
@@ -61,6 +63,8 @@ public class SettingsManager {
         this.configLoader = new com.minelauncher.utils.ConfigLoader(baseDir.getAbsolutePath());
         this.curseForgeProxyUrl = configLoader.getProperty("curseforge.proxy.url", "https://minecraft-launcher-java.vercel.app/api/cf");
         this.modrinthApiUrl = configLoader.getProperty("modrinth.api.url", "https://api.modrinth.com/v2");
+        this.errorReportUrl = configLoader.getProperty("error.report.url", "");
+        this.backupPath = configLoader.getProperty("backup.path", "");
 
         LOG.info("Diretório base: {}", baseDir.getAbsolutePath());
     }
@@ -82,6 +86,8 @@ public class SettingsManager {
                     language = data.language != null ? data.language : "pt_BR";
                     curseForgeProxyUrl = data.curseForgeProxyUrl != null && !data.curseForgeProxyUrl.isBlank() ? data.curseForgeProxyUrl : "https://minecraft-launcher-java.vercel.app/api/cf";
                     modrinthApiUrl = data.modrinthApiUrl != null && !data.modrinthApiUrl.isBlank() ? data.modrinthApiUrl : "https://api.modrinth.com/v2";
+                    errorReportUrl = data.errorReportUrl != null ? data.errorReportUrl : "";
+                    backupPath = data.backupPath != null ? data.backupPath : "";
                 }
             } catch (Exception e) {
                 LOG.error("Erro ao carregar configurações", e);
@@ -121,6 +127,8 @@ public class SettingsManager {
             data.language = language;
             data.curseForgeProxyUrl = curseForgeProxyUrl;
             data.modrinthApiUrl = modrinthApiUrl;
+            data.errorReportUrl = errorReportUrl;
+            data.backupPath = backupPath;
             Files.writeString(settingsFile.toPath(), GSON.toJson(data));
 
             // FIX C-3: cifrar tokens antes de serializar contas.
@@ -190,6 +198,10 @@ public class SettingsManager {
     public void setCurseForgeProxyUrl(String url) { this.curseForgeProxyUrl = url; save(); }
     public String getModrinthApiUrl() { return modrinthApiUrl; }
     public void setModrinthApiUrl(String url) { this.modrinthApiUrl = url; save(); }
+    public String getErrorReportUrl() { return errorReportUrl; }
+    public void setErrorReportUrl(String url) { this.errorReportUrl = url; save(); }
+    public String getBackupPath() { return backupPath; }
+    public void setBackupPath(String path) { this.backupPath = path; save(); }
 
     public void addAccount(GameProfile profile) {
         accounts.removeIf(a -> a.getUuid().equals(profile.getUuid()));
@@ -228,5 +240,7 @@ public class SettingsManager {
         public String language;
         public String curseForgeProxyUrl;
         public String modrinthApiUrl;
+        public String errorReportUrl;
+        public String backupPath;
     }
 }

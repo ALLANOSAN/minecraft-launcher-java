@@ -5,6 +5,7 @@ import com.minelauncher.launcher.VersionManager;
 import com.minelauncher.models.GameProfile;
 import com.minelauncher.models.LaunchProfile;
 import com.minelauncher.settings.SettingsManager;
+import java.io.File;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -16,10 +17,12 @@ public class GameLaunchService {
 
     private final VersionManager versionManager;
     private final GameLauncher gameLauncher;
+    private final BackupService backupService;
 
-    public GameLaunchService(VersionManager versionManager, GameLauncher gameLauncher) {
+    public GameLaunchService(VersionManager versionManager, GameLauncher gameLauncher, BackupService backupService) {
         this.versionManager = versionManager;
         this.gameLauncher = gameLauncher;
+        this.backupService = backupService;
     }
 
     public void launch(LaunchProfile profile, GameProfile account,
@@ -28,6 +31,15 @@ public class GameLaunchService {
                        Consumer<Exception> onError) {
         new Thread(() -> {
             try {
+                // 0. Backup automático (se configurado)
+                String backupPath = SettingsManager.getInstance().getBackupPath();
+                if (backupPath != null && !backupPath.isBlank()) {
+                    File worldDir = new File(profile.getGameDir() != null ? profile.getGameDir() : SettingsManager.getInstance().getBaseDir().getAbsolutePath());
+                    File backupDir = new File(backupPath);
+                    statusUpdater.accept("Realizando backup do mundo...");
+                    backupService.createSnapshot(worldDir, backupDir);
+                }
+
                 // 1. Baixar versão vanilla se necessário
                 if (!versionManager.getInstalledVersions().contains(profile.getGameVersion())) {
                     statusUpdater.accept("Baixando Minecraft " + profile.getGameVersion() + "...");
@@ -68,6 +80,7 @@ public class GameLaunchService {
                 watcher.start();
 
             } catch (Exception e) {
+                com.minelauncher.ui.services.ErrorReporter.report(e, "GameLaunchService: launch");
                 onError.accept(e);
             }
         }).start();

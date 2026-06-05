@@ -1,6 +1,7 @@
 package com.minelauncher.ui.controllers;
 
 import com.minelauncher.net.NetMonitor;
+import com.minelauncher.profiles.ProfileManager;
 import javafx.animation.AnimationTimer;
 import javafx.scene.control.Label;
 
@@ -30,6 +31,7 @@ public class StatusBarUpdater {
     private final Label statusNetLabel;
     private final NetMonitor netMonitor;
     private final Runnable initialNetCheck;
+    private final ProfileManager profileManager;
 
     private final long sessionStartMs = System.currentTimeMillis();
     private AnimationTimer timer;
@@ -41,13 +43,15 @@ public class StatusBarUpdater {
                             Label statusRamLabel,
                             Label statusNetLabel,
                             NetMonitor netMonitor,
-                            Runnable initialNetCheck) {
+                            Runnable initialNetCheck,
+                            ProfileManager profileManager) {
         this.statusClockLabel = statusClockLabel;
         this.sessionTimeLabel = sessionTimeLabel;
         this.statusRamLabel = statusRamLabel;
         this.statusNetLabel = statusNetLabel;
         this.netMonitor = netMonitor;
         this.initialNetCheck = initialNetCheck;
+        this.profileManager = profileManager;
     }
 
     public void start() {
@@ -94,12 +98,18 @@ public class StatusBarUpdater {
 
     public void updateRam() {
         if (statusRamLabel == null) return;
+        
         Runtime rt = Runtime.getRuntime();
         long usedBytes = rt.totalMemory() - rt.freeMemory();
-        long maxBytes = rt.maxMemory();
+        
+        long allocatedBytes = 2048 * 1024 * 1024L; // Default
+        if (profileManager != null && profileManager.getActiveProfile() != null) {
+            allocatedBytes = (long) profileManager.getActiveProfile().getMaxRam() * 1024 * 1024L;
+        }
+        
         statusRamLabel.setText(
                 com.minelauncher.utils.FileUtils.formatBytes(usedBytes) + " / " +
-                com.minelauncher.utils.FileUtils.formatBytes(maxBytes));
+                com.minelauncher.utils.FileUtils.formatBytes(allocatedBytes));
     }
 
     public void updateNetLabel(boolean online) {

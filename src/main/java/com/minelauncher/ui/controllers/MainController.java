@@ -3,9 +3,14 @@ package com.minelauncher.ui.controllers;
 import com.minelauncher.auth.MicrosoftAuth;
 import com.minelauncher.auth.OfflineAuth;
 import com.minelauncher.ui.services.AuthService;
+import com.minelauncher.ui.services.BackupService;
 import com.minelauncher.ui.services.VersionInstallationService;
 import com.minelauncher.ui.services.GameLaunchService;
+import com.minelauncher.ui.services.NavigationService;
+import com.minelauncher.ui.services.LauncherStateService;
+import com.minelauncher.ui.services.WindowService;
 import com.minelauncher.launcher.GameLauncher;
+import java.util.Map;
 import com.minelauncher.mods.ModManager;
 import com.minelauncher.models.ModInfo;
 import com.minelauncher.launcher.VersionManager;
@@ -180,16 +185,31 @@ public class MainController implements Initializable {
 
     private static final Logger LOG = LoggerFactory.getLogger(MainController.class);
 
-    // Managers
+    // Managers & Services
+    @com.google.inject.Inject
     private ProfileManager profileManager;
+    @com.google.inject.Inject
     private VersionManager versionManager;
+    @com.google.inject.Inject
     private GameLauncher gameLauncher;
+    @com.google.inject.Inject
     private ModManager modManager;
-    private MicrosoftAuth microsoftAuth;
+    @com.google.inject.Inject
     private ModActions modActions;
+    @com.google.inject.Inject
     private AuthService authService;
+    @com.google.inject.Inject
     private VersionInstallationService versionInstallationService;
+    @com.google.inject.Inject
     private GameLaunchService gameLaunchService;
+    @com.google.inject.Inject
+    private NavigationService navigationService;
+    @com.google.inject.Inject
+    private LauncherStateService stateService;
+    @com.google.inject.Inject
+    private WindowService windowService;
+    @com.google.inject.Inject
+    private BackupService backupService;
 
     // Lista de resultados da última busca
     private List<ModInfo> lastSearchResults = new ArrayList<>();
@@ -265,13 +285,36 @@ public class MainController implements Initializable {
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         debugLog(">>> initialize() entrou");
-        SettingsManager settings = SettingsManager.getInstance();
-        profileManager = new ProfileManager(settings.getBaseDir());
-        versionManager = new VersionManager(settings.getBaseDir());
-        gameLauncher = new GameLauncher(settings.getBaseDir(), versionManager);
-        modManager = new ModManager(settings.getBaseDir());
+        
+        setupServices();
+        
+        debugLog(">>> initialize() deps OK");
+        setupUI();
+        debugLog(">>> initialize() setupUI OK");
+        setupDrag();
+        loadProfiles();
+        loadVersions();
+        loadSavedAccount();
+        debugLog(">>> initialize() FIM");
+    }
+
+    private void setupServices() {
+        Map<String, Pane> panes = Map.of(
+            "home", homePane, "versions", versionsPane, "mods", modsPane,
+            "resourcePacks", resourcePacksPane, "saves", savesPane,
+            "screenshots", screenshotsPane, "settings", settingsPane
+        );
+        Map<String, Button> navButtons = Map.of(
+            "home", homeBtn, "versions", versionsBtn, "mods", modsBtn,
+            "resourcePacks", resourcePacksBtn, "saves", savesBtn,
+            "screenshots", screenshotsBtn, "settings", settingsBtn
+        );
+        
+        this.navigationService = new NavigationService(panes, navButtons);
+        this.stateService = new LauncherStateService(sessionStatusLabel);
+        this.windowService = new WindowService(stage, gameLauncher, this::stopLiveUpdates);
         this.versionInstallationService = new VersionInstallationService(versionManager, statusLabel, progressBar);
-        this.gameLaunchService = new GameLaunchService(versionManager, gameLauncher);
+        this.gameLaunchService = new GameLaunchService(versionManager, gameLauncher, backupService);
         this.authService = new AuthService(
             this::showDeviceCodeOverlay,
             () -> {
@@ -284,17 +327,6 @@ public class MainController implements Initializable {
                 closeDeviceCodeOverlay();
             }
         );
-        microsoftAuth = new MicrosoftAuth();
-        modActions = new ModActions(this, modManager, profileManager);
-        debugLog(">>> initialize() deps OK");
-
-        setupUI();
-        debugLog(">>> initialize() setupUI OK | clockLabel=" + statusClockLabel);
-        setupDrag();
-        loadProfiles();
-        loadVersions();
-        loadSavedAccount();
-        debugLog(">>> initialize() FIM");
     }
 
     public void setStage(Stage stage) {
@@ -914,7 +946,7 @@ public class MainController implements Initializable {
         if (statusBarUpdater == null) {
             statusBarUpdater = new StatusBarUpdater(
                     statusClockLabel, sessionTimeLabel, statusRamLabel, statusNetLabel,
-                    netMonitor, this::checkNetAsync);
+                    netMonitor, this::checkNetAsync, profileManager);
         }
         statusBarUpdater.start();
     }

@@ -38,6 +38,7 @@ public class AuthService {
                 onLoginSuccess.run();
             });
         }).exceptionally(ex -> {
+            com.minelauncher.ui.services.ErrorReporter.report(ex, "AuthService: loginMicrosoft");
             Platform.runLater(() -> onLoginError.accept(ex.getMessage()));
             return null;
         });

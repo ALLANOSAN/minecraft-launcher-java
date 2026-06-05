@@ -572,7 +572,7 @@ public class ModManager {
                     LOG.debug("Mod baixado: {}/{} - {}", count, total, modFileName);
 
                 } catch (Exception e) {
-                    LOG.warn("Erro ao baixar mod projectID={} fileID={}: {}", projectID, fileID, e.getMessage());
+                    com.minelauncher.ui.services.ErrorReporter.report(e, "ModManager: downloadCurseForgeMods");
                     failed.incrementAndGet();
                 } finally {
                     latch.countDown();
@@ -800,47 +800,40 @@ public class ModManager {
      */
     public void extractCurseForgeZip(File zipFile, File modpackDir) throws IOException {
         try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(zipFile)) {
-            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
-            int extracted = 0;
-            while (entries.hasMoreElements()) {
-                java.util.zip.ZipEntry entry = entries.nextElement();
-                String name = entry.getName();
-
-                // Pular diretórios
-                if (entry.isDirectory()) continue;
-
-                // Extrair manifesto CurseForge (necessário para detectar MC version e mod loader)
-                if (name.equals("manifest.json")) {
-                    File dest = new File(modpackDir, "manifest.json");
-                    try (java.io.InputStream is = zip.getInputStream(entry);
-                         java.io.FileOutputStream fos = new java.io.FileOutputStream(dest)) {
-                        byte[] buffer = new byte[8192];
-                        int len;
-                        while ((len = is.read(buffer)) > 0) fos.write(buffer, 0, len);
-                    }
-                    LOG.info("Manifesto CurseForge extraído");
-                    continue;
-                }
-
-                // Extrair tudo de overrides/ para o diretório do modpack
-                if (name.startsWith("overrides/")) {
-                    String relativePath = name.substring("overrides/".length());
-                    if (relativePath.isEmpty()) continue;
-                    File dest = new File(modpackDir, relativePath);
-                    validatePath(modpackDir, dest);
-                    dest.getParentFile().mkdirs();
-                    try (java.io.InputStream is = zip.getInputStream(entry);
-                         java.io.FileOutputStream fos = new java.io.FileOutputStream(dest)) {
-                        byte[] buffer = new byte[8192];
-                        int len;
-                        while ((len = is.read(buffer)) > 0) {
-                            fos.write(buffer, 0, len);
+            final int[] extracted = {0};
+            
+            java.util.Collections.list(zip.entries()).stream()
+                .filter(entry -> !entry.isDirectory())
+                .forEach(entry -> {
+                    String name = entry.getName();
+                    try {
+                        if (name.equals("manifest.json")) {
+                            File dest = new File(modpackDir, "manifest.json");
+                            try (java.io.InputStream is = zip.getInputStream(entry);
+                                 java.io.FileOutputStream fos = new java.io.FileOutputStream(dest)) {
+                                is.transferTo(fos);
+                            }
+                            LOG.info("Manifesto CurseForge extraído");
+                        } else if (name.startsWith("overrides/")) {
+                            String relativePath = name.substring("overrides/".length());
+                            if (!relativePath.isEmpty()) {
+                                File dest = new File(modpackDir, relativePath);
+                                validatePath(modpackDir, dest);
+                                dest.getParentFile().mkdirs();
+                                try (java.io.InputStream is = zip.getInputStream(entry);
+                                     java.io.FileOutputStream fos = new java.io.FileOutputStream(dest)) {
+                                    is.transferTo(fos);
+                                }
+                                extracted[0]++;
+                            }
                         }
+                    } catch (IOException e) {
+                        throw new java.io.UncheckedIOException(e);
                     }
-                    extracted++;
-                }
-            }
-            LOG.info("Extraídos {} arquivos do modpack", extracted);
+                });
+            LOG.info("Extraídos {} arquivos do modpack", extracted[0]);
+        } catch (java.io.UncheckedIOException e) {
+            throw e.getCause();
         }
     }
 

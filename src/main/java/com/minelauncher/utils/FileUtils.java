@@ -73,4 +73,19 @@ public final class FileUtils {
             return false;
         }
     }
+
+    public static void copyDirectory(File source, File target) throws IOException {
+        if (!target.exists()) target.mkdirs();
+        File[] files = source.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                File dest = new File(target, file.getName());
+                if (file.isDirectory()) {
+                    copyDirectory(file, dest);
+                } else {
+                    Files.copy(file.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+    }
 }

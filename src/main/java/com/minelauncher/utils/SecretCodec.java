@@ -45,9 +45,10 @@ public final class SecretCodec {
                 return Files.readAllBytes(keyPath);
             }
             
-            // Generate new random key
-            byte[] newKey = new byte[32];
-            new java.security.SecureRandom().nextBytes(newKey);
+            // Generate new random key, salted with machine ID
+            byte[] seed = com.minelauncher.utils.MachineIdentifier.getUniqueId().getBytes("UTF-8");
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] newKey = md.digest(seed);
             
             Files.createDirectories(keyPath.getParent());
             Files.write(keyPath, newKey);
@@ -58,9 +59,9 @@ public final class SecretCodec {
                 // Ignore if not supported or failed
             }
             return newKey;
-        } catch (IOException e) {
-            LOG.error("Falha ao carregar/gerar chave de criptografia, usando fallback inseguro", e);
-            return new byte[32]; // Fallback (inseguro)
+        } catch (Exception e) {
+            LOG.error("Falha fatal ao carregar/gerar chave de criptografia", e);
+            throw new RuntimeException("Falha crítica na segurança: não foi possível carregar a chave de criptografia", e);
         }
     }
 

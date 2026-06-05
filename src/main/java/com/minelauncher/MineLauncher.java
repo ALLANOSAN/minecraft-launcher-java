@@ -1,5 +1,9 @@
 package com.minelauncher;
 
+import com.minelauncher.di.GuiceControllerFactory;
+import com.minelauncher.di.LauncherModule;
+import com.google.inject.Guice;
+import com.google.inject.Injector;
 import com.minelauncher.settings.SettingsManager;
 import com.minelauncher.ui.controllers.MainController;
 import com.minelauncher.utils.ShortcutManager;
@@ -28,7 +32,10 @@ public class MineLauncher extends Application {
         ShortcutManager.createShortcut();
 
         try {
+            Injector injector = Guice.createInjector(new LauncherModule());
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/main.fxml"));
+            loader.setControllerFactory(new GuiceControllerFactory(injector));
+            
             Parent root = loader.load();
 
             MainController controller = loader.getController();

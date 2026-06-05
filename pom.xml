@@ -68,6 +68,12 @@
             <version>5.14.0</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+            <version>7.0.0</version>
+        </dependency>
+
         <!-- Logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -91,6 +97,12 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
             <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.11.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -139,10 +151,28 @@
                                     <mainClass>${main.class}</mainClass>
                                     <manifestEntries>
                                         <Main-Class>com.minelauncher.Main</Main-Class>
-                                        <Add-Exports>javafx.graphics/com.sun.javafx.application=ALL-UNNAMED javafx.graphics/com.sun.glass.ui=ALL-UNNAMED javafx.graphics/com.sun.javafx.stage=ALL-UNNAMED javafx.graphics/com.sun.javafx.tk=ALL-UNNAMED javafx.graphics/com.sun.javafx.scene=ALL-UNNAMED javafx.graphics/com.sun.javafx.util=ALL-UNNAMED javafx.base/com.sun.javafx.binding=ALL-UNNAMED javafx.base/com.sun.javafx.event=ALL-UNNAMED javafx.base/com.sun.javafx.collections=ALL-UNNAMED javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED javafx.controls/com.sun.javafx.scene.control.skin=ALL-UNNAMED javafx.fxml/com.sun.javafx.fxml=ALL-UNNAMED</Add-Exports>
                                     </manifestEntries>
                                 </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/substrate/**</exclude>
+                                        <exclude>META-INF/versions/**</exclude>
+                                        <exclude>META-INF/LICENSE*</exclude>
+                                        <exclude>META-INF/AL2.0</exclude>
+                                        <exclude>META-INF/LGPL2.1</exclude>
+                                        <exclude>META-INF/okio.kotlin_module</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                         </configuration>
                     </execution>
