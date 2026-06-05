@@ -31,14 +31,18 @@ public class ModActions {
 
     private static final Logger LOG = LoggerFactory.getLogger(ModActions.class);
 
-    private final MainController controller;
+    private MainController controller;
     private final ModManager modManager;
     private final ProfileManager profileManager;
 
-    public ModActions(MainController controller, ModManager modManager, ProfileManager profileManager) {
-        this.controller = controller;
+    @com.google.inject.Inject
+    public ModActions(ModManager modManager, ProfileManager profileManager) {
         this.modManager = modManager;
         this.profileManager = profileManager;
+    }
+
+    public void setController(MainController controller) {
+        this.controller = controller;
     }
 
     public void searchMods() {

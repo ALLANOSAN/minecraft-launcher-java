@@ -16,14 +16,18 @@ import java.util.function.Consumer;
 public class AuthService {
 
     private final MicrosoftAuth microsoftAuth;
-    private final Consumer<MicrosoftAuth.DeviceCodeResponse> onDeviceCodeCallback;
-    private final Runnable onLoginSuccess;
-    private final Consumer<String> onLoginError;
+    private Consumer<MicrosoftAuth.DeviceCodeResponse> onDeviceCodeCallback;
+    private Runnable onLoginSuccess;
+    private Consumer<String> onLoginError;
 
-    public AuthService(Consumer<MicrosoftAuth.DeviceCodeResponse> onDeviceCodeCallback,
-                       Runnable onLoginSuccess,
-                       Consumer<String> onLoginError) {
+    @com.google.inject.Inject
+    public AuthService() {
         this.microsoftAuth = new MicrosoftAuth();
+    }
+
+    public void setUI(Consumer<MicrosoftAuth.DeviceCodeResponse> onDeviceCodeCallback,
+                      Runnable onLoginSuccess,
+                      Consumer<String> onLoginError) {
         this.onDeviceCodeCallback = onDeviceCodeCallback;
         this.onLoginSuccess = onLoginSuccess;
         this.onLoginError = onLoginError;

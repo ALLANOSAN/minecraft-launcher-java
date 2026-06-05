@@ -9,10 +9,13 @@ import java.util.Map;
  */
 public class NavigationService {
 
-    private final Map<String, Pane> panes;
-    private final Map<String, Button> navButtons;
+    private Map<String, Pane> panes;
+    private Map<String, Button> navButtons;
 
-    public NavigationService(Map<String, Pane> panes, Map<String, Button> navButtons) {
+    @com.google.inject.Inject
+    public NavigationService() {}
+
+    public void setDependencies(Map<String, Pane> panes, Map<String, Button> navButtons) {
         this.panes = panes;
         this.navButtons = navButtons;
     }

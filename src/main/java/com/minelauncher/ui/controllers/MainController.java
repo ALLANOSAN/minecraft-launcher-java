@@ -156,6 +156,10 @@ public class MainController implements Initializable {
     private CheckBox snapshotsCheck;
     @FXML
     private CheckBox keepOpenCheck;
+    @FXML
+    private TextField backupPathField;
+    @FXML
+    private Button browseBackupBtn;
 
     // Status
     @FXML
@@ -295,7 +299,20 @@ public class MainController implements Initializable {
         loadProfiles();
         loadVersions();
         loadSavedAccount();
+        backupPathField.setText(SettingsManager.getInstance().getBackupPath());
         debugLog(">>> initialize() FIM");
+    }
+
+    @FXML
+    private void browseBackupPath() {
+        javafx.stage.DirectoryChooser chooser = new javafx.stage.DirectoryChooser();
+        chooser.setTitle("Selecionar pasta de backup");
+        java.io.File dir = chooser.showDialog(stage);
+        if (dir != null) {
+            String path = dir.getAbsolutePath();
+            backupPathField.setText(path);
+            SettingsManager.getInstance().setBackupPath(path);
+        }
     }
 
     private void setupServices() {
@@ -310,12 +327,11 @@ public class MainController implements Initializable {
             "screenshots", screenshotsBtn, "settings", settingsBtn
         );
         
-        this.navigationService = new NavigationService(panes, navButtons);
-        this.stateService = new LauncherStateService(sessionStatusLabel);
-        this.windowService = new WindowService(stage, gameLauncher, this::stopLiveUpdates);
-        this.versionInstallationService = new VersionInstallationService(versionManager, statusLabel, progressBar);
-        this.gameLaunchService = new GameLaunchService(versionManager, gameLauncher, backupService);
-        this.authService = new AuthService(
+        this.navigationService.setDependencies(panes, navButtons);
+        this.stateService.setSessionStatusLabel(sessionStatusLabel);
+        this.windowService.setUI(stage, this::stopLiveUpdates);
+        this.versionInstallationService.setUI(statusLabel, progressBar);
+        this.authService.setUI(
             this::showDeviceCodeOverlay,
             () -> {
                 refreshAccountCombo();

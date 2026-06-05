@@ -12,11 +12,15 @@ import java.util.function.Consumer;
 public class VersionInstallationService {
 
     private final VersionManager versionManager;
-    private final Label statusLabel;
-    private final ProgressBar progressBar;
+    private Label statusLabel;
+    private ProgressBar progressBar;
 
-    public VersionInstallationService(VersionManager versionManager, Label statusLabel, ProgressBar progressBar) {
+    @com.google.inject.Inject
+    public VersionInstallationService(VersionManager versionManager) {
         this.versionManager = versionManager;
+    }
+
+    public void setUI(Label statusLabel, ProgressBar progressBar) {
         this.statusLabel = statusLabel;
         this.progressBar = progressBar;
     }

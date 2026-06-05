@@ -14,13 +14,17 @@ import javafx.scene.layout.Pane;
  */
 public class WindowService {
 
-    private final Stage stage;
+    private Stage stage;
     private final GameLauncher gameLauncher;
-    private final Runnable stopLiveUpdates;
+    private Runnable stopLiveUpdates;
 
-    public WindowService(Stage stage, GameLauncher gameLauncher, Runnable stopLiveUpdates) {
-        this.stage = stage;
+    @com.google.inject.Inject
+    public WindowService(GameLauncher gameLauncher) {
         this.gameLauncher = gameLauncher;
+    }
+
+    public void setUI(Stage stage, Runnable stopLiveUpdates) {
+        this.stage = stage;
         this.stopLiveUpdates = stopLiveUpdates;
     }
 
@@ -36,10 +40,8 @@ public class WindowService {
         BorderPane container = (BorderPane) root.getChildren().get(0);
 
         if (!isMaximized) {
-            root.getStyleClass().add("maximized");
             container.getStyleClass().add("maximized");
         } else {
-            root.getStyleClass().remove("maximized");
             container.getStyleClass().remove("maximized");
         }
     }

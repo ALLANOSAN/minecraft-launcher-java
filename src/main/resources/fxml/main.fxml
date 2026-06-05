@@ -550,6 +550,11 @@
                         <CheckBox fx:id="snapshotsCheck" text="Mostrar snapshots" styleClass="check-box"/>
                         <CheckBox fx:id="keepOpenCheck" text="Manter launcher aberto após iniciar o jogo" styleClass="check-box"
                                   selected="true"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="Pasta de Backup:" styleClass="setting-label"/>
+                            <TextField fx:id="backupPathField" promptText="Selecione a pasta..." editable="false" HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="browseBackupBtn" text="..." onAction="#browseBackupPath"/>
+                        </HBox>
                     </VBox>
 
                     <HBox alignment="CENTER_RIGHT">

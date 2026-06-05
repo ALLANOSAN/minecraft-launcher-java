@@ -10,14 +10,17 @@ import java.util.Map;
  */
 public class LauncherStateService {
 
-    private final Label sessionStatusLabel;
+    private Label sessionStatusLabel;
     private static final java.util.List<String> SESSION_VARIANTS = java.util.List.of(
         "session-chip-warm", "session-chip-cool", "session-chip-danger", "session-chip-accent"
     );
 
     public enum LauncherState { BUSY, PLAYING, ERROR, READY }
 
-    public LauncherStateService(Label sessionStatusLabel) {
+    @com.google.inject.Inject
+    public LauncherStateService() {}
+
+    public void setSessionStatusLabel(Label sessionStatusLabel) {
         this.sessionStatusLabel = sessionStatusLabel;
     }
 

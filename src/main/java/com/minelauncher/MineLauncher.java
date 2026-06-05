@@ -6,9 +6,12 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.minelauncher.settings.SettingsManager;
 import com.minelauncher.ui.controllers.MainController;
+import com.minelauncher.ui.services.UpdateService;
 import com.minelauncher.utils.ShortcutManager;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -30,6 +33,24 @@ public class MineLauncher extends Application {
         primaryStage = stage;
         SettingsManager.getInstance().load();
         ShortcutManager.createShortcut();
+
+        // Run update check after JavaFX is initialized
+        Platform.runLater(() -> {
+            UpdateService updateService = new UpdateService();
+            String downloadUrl = updateService.checkVersion();
+            if (downloadUrl != null) {
+                com.minelauncher.ui.controllers.ModActions.showConfirmDialog(
+                    "Atualização",
+                    "Uma nova versão foi encontrada!",
+                    "Deseja atualizar e reiniciar o launcher?",
+                    confirmed -> {
+                        if (confirmed) {
+                            updateService.downloadAndUpdate(downloadUrl);
+                        }
+                    }
+                );
+            }
+        });
 
         try {
             Injector injector = Guice.createInjector(new LauncherModule());

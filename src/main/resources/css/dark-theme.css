@@ -60,12 +60,17 @@
     -fx-background-image: url("/images/grid-pattern.png");
     -fx-background-repeat: repeat;
     -fx-background-position: 0 0;
+    
+    /* Padding padrão para modo janela */
+    -fx-padding: 50 0 0 0; 
 }
 
 .main-container.maximized {
     -fx-background-radius: 0;
     -fx-border-radius: 0;
     -fx-border-width: 0;
+    /* Padding zero para modo maximizado */
+    -fx-padding: 0 0 0 0;
 }
 
 .root-pane {

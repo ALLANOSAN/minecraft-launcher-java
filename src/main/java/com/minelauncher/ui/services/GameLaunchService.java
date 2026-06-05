@@ -19,6 +19,7 @@ public class GameLaunchService {
     private final GameLauncher gameLauncher;
     private final BackupService backupService;
 
+    @com.google.inject.Inject
     public GameLaunchService(VersionManager versionManager, GameLauncher gameLauncher, BackupService backupService) {
         this.versionManager = versionManager;
         this.gameLauncher = gameLauncher;
