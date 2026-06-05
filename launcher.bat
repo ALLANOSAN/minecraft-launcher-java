@@ -1,6 +1,6 @@
 @echo off
 set "SCRIPT_DIR=%~dp0"
-set "JAR_PATH=%SCRIPT_DIR%target\minecraft-launcher-1.0.0.jar"
+set "JAR_PATH=%SCRIPT_DIR%target\minecraft-launcher.jar"
 
 java -Xmx2G ^
     --add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED ^

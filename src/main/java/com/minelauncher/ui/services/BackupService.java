@@ -18,7 +18,7 @@ public class BackupService {
     public void createSnapshot(File worldDir, File backupBaseDir) throws IOException {
         if (!worldDir.exists()) return;
         
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"));
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmssSSS"));
         File backupDir = new File(backupBaseDir, worldDir.getName() + "_" + timestamp);
         
         LOG.info("Iniciando backup de {} para {}", worldDir.getName(), backupDir.getAbsolutePath());

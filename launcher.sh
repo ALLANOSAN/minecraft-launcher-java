@@ -2,7 +2,7 @@
 # MineLauncher - Executar Launcher
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-JAR_PATH="$SCRIPT_DIR/target/minecraft-launcher-1.0.0.jar"
+JAR_PATH="$SCRIPT_DIR/target/minecraft-launcher.jar"
 
 # Verificar se o JAR existe
 if [ ! -f "$JAR_PATH" ]; then

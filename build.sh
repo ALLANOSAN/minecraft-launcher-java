@@ -51,7 +51,7 @@ case "$ACTION" in
         echo "Gerando JAR executável..."
         mvn clean package -DskipTests
         echo ""
-        echo "Build concluído! JAR gerado em: target/minecraft-launcher-1.0.0.jar"
+        echo "Build concluído! JAR gerado em: target/minecraft-launcher.jar"
         echo "Para rodar, use: ./launcher.sh"
         ;;
     run)
