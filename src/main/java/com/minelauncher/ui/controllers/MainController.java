@@ -844,11 +844,10 @@ public class MainController implements Initializable {
 
         // BUG-3: o índice da lista filtrada não corresponde ao índice em savesFull.
         // Extrai o nome real do mundo a partir do item selecionado (descartando
-        // qualquer prefixo tipo "[Save] ") e busca-o em savesFull.
+        // o prefixo "[Save] ") e busca-o em savesFull. savesFull armazena
+        // APENAS o nome do diretório (ver populateSaves), então selected é
+        // sempre "[Save] <worldName>" e o replace extrai o nome limpo.
         String worldName = selected.replace("[Save] ", "").trim();
-        if (!savesFull.contains(worldName) && savesFull.contains(selected)) {
-            worldName = selected;
-        }
         if (!savesFull.contains(worldName)) {
             statusLabel.setText("Save não encontrado na lista");
             return;
@@ -1086,9 +1085,8 @@ public class MainController implements Initializable {
         deviceCodeOverlay.getStyleClass().add("device-code-overlay");
 
         VBox card = new VBox(20);
-        card.setAlignment(javafx.geometry.Pos.CENTER);
         card.getStyleClass().add("device-code-card");
-        card.setMaxSize(500, 350);
+        // QUAL-16: setAlignment e setMaxSize foram movidos para CSS.
 
         Label title = new Label("LOGIN MICROSOFT");
         title.getStyleClass().add("device-code-title");
@@ -1098,8 +1096,8 @@ public class MainController implements Initializable {
 
         TextField codeField = new TextField(dcr.user_code());
         codeField.setEditable(false);
-        codeField.setAlignment(javafx.geometry.Pos.CENTER);
         codeField.getStyleClass().add("device-code-field");
+        // QUAL-16: setAlignment movido para CSS.
 
         Hyperlink urlLink = new Hyperlink(dcr.verification_uri());
         urlLink.getStyleClass().add("device-code-link");
@@ -1295,14 +1293,12 @@ public class MainController implements Initializable {
         // Card container
         VBox card = new VBox(20);
         card.getStyleClass().add("profile-settings-card");
-        card.setPrefWidth(540);
-        card.setMaxWidth(540);
-        card.setMaxHeight(520);
+        // QUAL-16: setPrefWidth/setMaxWidth/setMaxHeight movidos para CSS.
 
         // Header
         HBox header = new HBox(12);
         header.getStyleClass().add("profile-settings-header");
-        header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        // QUAL-16: setAlignment movido para CSS.
         Label title = new Label("Configurar: " + profile.getName());
         title.getStyleClass().add("profile-settings-title");
         Region spacer = new Region();
@@ -1319,8 +1315,7 @@ public class MainController implements Initializable {
         // Grid content
         javafx.scene.layout.GridPane grid = new javafx.scene.layout.GridPane();
         grid.getStyleClass().addAll("profile-settings-grid", "profile-settings-grid-padded");
-        grid.setHgap(12);
-        grid.setVgap(12);
+        // QUAL-14: setHgap e setVgap movidos para CSS (.profile-settings-grid).
 
         // RAM
         TextField ramField = new TextField(String.valueOf(profile.getMaxRam()));

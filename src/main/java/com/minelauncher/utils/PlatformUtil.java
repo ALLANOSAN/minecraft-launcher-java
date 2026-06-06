@@ -33,9 +33,10 @@ public final class PlatformUtil {
 
     /**
      * QUAL-15: retorna a chave usada pela Mojang nos runtimes Java —
-     * combina SO + arquitetura (ex.: "windows-x64", "mac-os-arm64", "linux-arm64").
-     * Diferente de {@link #getOSKey()}, que devolve apenas "windows"/"osx"/"linux"
-     * para uso em metadata de mods/libs.
+     * combina SO + arquitetura (ex.: "windows-x64", "mac-os-arm64",
+     * "linux-arm64"/"linux"/"linux-x86"). Diferente de {@link #getOSKey()},
+     * que devolve apenas "windows"/"osx"/"linux" para uso em metadata
+     * de mods/libs. Para Linux, o fallback é "linux" (x86_64).
      */
     public static String getMojangOSKey() {
         String os = getOSKey();
@@ -45,7 +46,7 @@ public final class PlatformUtil {
         return switch (os) {
             case "windows" -> is64 ? "windows-x64" : "windows-x86";
             case "osx" -> isArm ? "mac-os-arm64" : "mac-os";
-            default -> isArm ? "linux-arm64" : "linux";
+            default -> isArm ? "linux-arm64" : is64 ? "linux" : "linux-x86";
         };
     }
 

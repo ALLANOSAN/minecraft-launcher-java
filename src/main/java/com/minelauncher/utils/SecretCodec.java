@@ -30,6 +30,13 @@ import java.util.Set;
  *
  * <p>O custo de adicionar a dependência JNA (que já está no pom.xml) é baixo;
  * só não foi feito agora para manter a mudança mínima.
+ *
+ * <p><b>QUAL-11 — Perda do arquivo {@code secret.key}:</b> Se o arquivo
+ * {@code secret.key} for apagado (ou se o usuário reinstalar o sistema e o
+ * arquivo não tiver sido feito backup), todos os tokens armazenados ficam
+ * <b>irrecuperáveis</b>. Os usuários precisarão refazer login (Microsoft OAuth
+ * ou offline). Considere instruir o usuário a fazer backup deste arquivo
+ * junto com {@code launcher_accounts.json}.
  */
 public final class SecretCodec {
     private static final Logger LOG = LoggerFactory.getLogger(SecretCodec.class);
@@ -61,6 +68,16 @@ public final class SecretCodec {
 
     private SecretCodec() {}
 
+    /**
+     * Carrega a chave AES de {@code ~/.minelauncher/secret.key} ou gera uma
+     * nova (salted com {@link MachineIdentifier}) se o arquivo não existir.
+     *
+     * <p><b>QUAL-11 — perda de chave:</b> se o arquivo {@code secret.key}
+     * for apagado, todos os tokens cifrados com a chave anterior ficam
+     * irrecuperáveis — o usuário terá que refazer login. Considere instruir
+     * o usuário a fazer backup deste arquivo junto com
+     * {@code launcher_accounts.json}.
+     */
     private static byte[] loadOrGenerateKey() {
         Path keyPath = Paths.get(System.getProperty("user.home"), ".minelauncher", "secret.key");
         try {

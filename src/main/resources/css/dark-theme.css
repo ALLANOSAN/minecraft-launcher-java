@@ -1637,3 +1637,122 @@
 .profile-settings-actions-padded {
     -fx-padding: 4 20 18 20;
 }
+
+/* ==================== QUAL-16c: Nav button opacity ==================== */
+.nav-btn {
+    -fx-opacity: 0.78;
+}
+.nav-btn.active {
+    -fx-opacity: 1.0;
+}
+
+/* ==================== QUAL-16e: ModActions confirm dialog ==================== */
+.mod-confirm-backdrop {
+    -fx-background-color: rgba(5, 7, 12, 0.72);
+}
+
+.mod-confirm-card {
+    -fx-background-color: #0F1320;
+    -fx-border-color: #1A2030;
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-effect: dropshadow(gaussian, #000000CC, 24, 0, 0, 12);
+}
+
+.mod-confirm-header {
+    -fx-border-color: #1A2030;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 18 22 14 22;
+}
+
+.mod-confirm-dot {
+    -fx-background-color: #FFB454;
+    -fx-background-radius: 4;
+    -fx-min-width: 8;
+    -fx-min-height: 8;
+}
+
+.mod-confirm-title {
+    -fx-text-fill: #FFB454;
+    -fx-font-family: "JetBrains Mono", monospace;
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 2px;
+}
+
+.mod-confirm-body {
+    -fx-padding: 20 22 20 22;
+}
+
+.mod-confirm-header-lbl {
+    -fx-text-fill: #E8EAF1;
+    -fx-font-family: "Fira Sans", sans-serif;
+    -fx-font-size: 18px;
+    -fx-font-weight: 700;
+}
+
+.mod-confirm-body-lbl {
+    -fx-text-fill: #8A93AB;
+    -fx-font-family: "Fira Sans", sans-serif;
+    -fx-font-size: 12px;
+}
+
+.mod-confirm-actions {
+    -fx-padding: 0 22 18 22;
+    -fx-alignment: center-right;
+    -fx-spacing: 8;
+}
+
+.mod-confirm-btn-cancel {
+    -fx-background-color: transparent;
+    -fx-text-fill: #8A93AB;
+    -fx-padding: 9 18;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 6;
+    -fx-cursor: hand;
+}
+
+.mod-confirm-btn-ok {
+    -fx-background-color: #F87171;
+    -fx-text-fill: #0F1320;
+    -fx-font-weight: 800;
+    -fx-padding: 9 18;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+}
+
+/* ==================== QUAL-16: hardcoded setAlignment/setMaxSize → CSS ==================== */
+.device-code-card {
+    -fx-alignment: center;
+    -fx-max-width: 500;
+    -fx-max-height: 350;
+}
+.device-code-field {
+    -fx-alignment: center;
+}
+.profile-settings-header {
+    -fx-alignment: center-left;
+}
+.mod-confirm-header {
+    -fx-alignment: center-left;
+}
+
+/* ==================== QUAL-16: hardcoded setMaxWidth/Min/Height + setAlignment ==================== */
+.profile-settings-card {
+    -fx-pref-width: 540;
+    -fx-max-width: 540;
+    -fx-max-height: 520;
+}
+.mod-confirm-card {
+    -fx-pref-width: 440;
+    -fx-min-width: 440;
+    -fx-max-width: 440;
+}
+/* StackPane.setAlignment(card, Pos.CENTER) → CSS -fx-alignment: center; */
+
+/* ==================== QUAL-14: GridPane hgap/vgap → CSS ==================== */
+.profile-settings-grid {
+    -fx-hgap: 12;
+    -fx-vgap: 12;
+}

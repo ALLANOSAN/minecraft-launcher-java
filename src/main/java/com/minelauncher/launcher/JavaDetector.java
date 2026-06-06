@@ -81,8 +81,11 @@ public class JavaDetector {
             String arch = System.getProperty("os.arch");
             osKey = arch.contains("aarch64") || arch.contains("arm") ? "mac-os-arm64" : "mac-os";
         } else {
+            // Linux: arm -> linux-arm64, x64 -> linux (default), x86 -> linux-x86
             String arch = System.getProperty("os.arch");
-            osKey = arch.contains("aarch64") || arch.contains("arm") ? "linux-arm64" : "linux";
+            boolean is64 = arch.contains("64");
+            boolean isArm = arch.contains("aarch64") || arch.contains("arm");
+            osKey = isArm ? "linux-arm64" : is64 ? "linux" : "linux-x86";
         }
 
         File[] runtimes = runtimeDir.listFiles(File::isDirectory);

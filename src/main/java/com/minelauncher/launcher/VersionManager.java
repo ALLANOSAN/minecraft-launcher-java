@@ -34,8 +34,8 @@ public class VersionManager {
     // QUAL-13: carimbo de tempo do cache do manifest para evitar re-fetchs
     // desnecessários dentro de uma janela curta. O manifest da Mojang muda
     // apenas quando uma nova versão é lançada, então 5 minutos é seguro.
-    private long cachedManifestAt = 0L;
-    private static final long MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000L;
+    private long manifestCachedAt = 0;
+    private static final long MANIFEST_TTL_MS = 5 * 60 * 1000L;
 
     public VersionManager(File baseDir) {
         this.baseDir = baseDir;
@@ -50,7 +50,7 @@ public class VersionManager {
         // em lançamento de versão), então 5 minutos é seguro e evita refetch
         // a cada installVersion()/getVersionDetail() durante uma mesma sessão.
         long now = System.currentTimeMillis();
-        if (cachedManifest != null && (now - cachedManifestAt) < MANIFEST_CACHE_TTL_MS) {
+        if (cachedManifest != null && (now - manifestCachedAt) < MANIFEST_TTL_MS) {
             return cachedManifest;
         }
 
@@ -62,7 +62,7 @@ public class VersionManager {
 
             String json = response.body().string();
             cachedManifest = gson.fromJson(json, VersionInfo.VersionManifest.class);
-            cachedManifestAt = now;
+            manifestCachedAt = now;
             return cachedManifest;
         }
     }

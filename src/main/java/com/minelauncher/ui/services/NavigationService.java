@@ -39,10 +39,10 @@ public class NavigationService {
             if (!btn.getStyleClass().contains("active")) {
                 btn.getStyleClass().add("active");
             }
-            btn.setOpacity(1.0);
         } else {
             btn.getStyleClass().remove("active");
-            btn.setOpacity(0.78);
         }
+        // QUAL-16c: opacidade movida para CSS (.nav-btn/.nav-btn.active).
+        // Antes: btn.setOpacity(1.0) / btn.setOpacity(0.78) aqui.
     }
 }

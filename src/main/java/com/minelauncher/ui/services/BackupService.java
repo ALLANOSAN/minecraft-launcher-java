@@ -50,4 +50,36 @@ public class BackupService {
         }
         LOG.info("Backup concluído e rotacionado.");
     }
+
+    /**
+     * Cria um snapshot de um diretório arbitrário (usado pelo GameLaunchService
+     * para fazer backup do diretório {@code gameDir/saves/} inteiro).
+     *
+     * BUG-5: o GameLaunchService original passava o gameDir inteiro como
+     * worldDir, o que fazia o BackupService copiar {@code .minecraft/} completo
+     * (mods, versions, assets, etc.). Com o worldDir agora apontando para
+     * {@code saves/}, o backup é apenas do conteúdo dessa pasta.
+     *
+     * @param worldDir       diretório a ser copiado (ex.: gameDir/saves/)
+     * @param backupBaseDir  pasta onde os snapshots são guardados
+     */
+    public void createSnapshot(File worldDir, File backupBaseDir) throws IOException {
+        if (worldDir == null || !worldDir.exists()) return;
+
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmssSSS"));
+        File backupDir = new File(backupBaseDir, worldDir.getName() + "_" + timestamp);
+
+        LOG.info("Iniciando backup de {} para {}", worldDir.getName(), backupDir.getAbsolutePath());
+
+        FileUtils.copyDirectory(worldDir, backupDir);
+
+        File[] backups = backupBaseDir.listFiles((dir, name) -> name.startsWith(worldDir.getName() + "_"));
+        if (backups != null && backups.length > MAX_BACKUPS) {
+            Arrays.sort(backups, Comparator.comparingLong(File::lastModified));
+            for (int i = 0; i < backups.length - MAX_BACKUPS; i++) {
+                FileUtils.deleteDirectory(backups[i]);
+            }
+        }
+        LOG.info("Backup concluído e rotacionado.");
+    }
 }

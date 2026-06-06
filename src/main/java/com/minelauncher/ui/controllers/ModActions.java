@@ -669,69 +669,58 @@ public class ModActions {
 
                 // Backdrop semi-transparente
                 javafx.scene.layout.Region backdrop = new javafx.scene.layout.Region();
-                backdrop.setStyle("-fx-background-color: rgba(5, 7, 12, 0.72);");
+                backdrop.getStyleClass().add("mod-confirm-backdrop");
 
                 // StackPane para centralizar o card
                 javafx.scene.layout.StackPane overlayRoot = new javafx.scene.layout.StackPane();
                 overlayRoot.setPickOnBounds(true);
                 overlayRoot.prefWidthProperty().bind(rootPane.widthProperty());
                 overlayRoot.prefHeightProperty().bind(rootPane.heightProperty());
-                
+
                 backdrop.prefWidthProperty().bind(overlayRoot.widthProperty());
                 backdrop.prefHeightProperty().bind(overlayRoot.heightProperty());
 
                 // Card
                 VBox card = new VBox(0);
-                card.setStyle(
-                    "-fx-background-color: #0F1320;" +
-                    "-fx-border-color: #1A2030;" +
-                    "-fx-border-width: 1;" +
-                    "-fx-background-radius: 10;" +
-                    "-fx-border-radius: 10;" +
-                    "-fx-effect: dropshadow(gaussian, #000000CC, 24, 0, 0, 12);"
-                );
-                card.setMaxWidth(440);
-                card.setMinWidth(440);
-                card.setMaxHeight(Region.USE_PREF_SIZE);
+                card.getStyleClass().add("mod-confirm-card");
+                // QUAL-16: setMaxWidth/setMinWidth movidos para CSS.
 
                 // Header bar
                 HBox headerBar = new HBox(10);
-                headerBar.setAlignment(Pos.CENTER_LEFT);
-                headerBar.setPadding(new Insets(18, 22, 14, 22));
-                headerBar.setStyle("-fx-border-color: #1A2030; -fx-border-width: 0 0 1 0;");
+                headerBar.getStyleClass().add("mod-confirm-header");
+                // QUAL-16: setAlignment movido para CSS.
                 Region dot = new Region();
-                dot.setStyle("-fx-background-color: #FFB454; -fx-background-radius: 4; -fx-min-width: 8; -fx-min-height: 8;");
+                dot.getStyleClass().add("mod-confirm-dot");
                 Label titleLbl = new Label(title.toUpperCase());
-                titleLbl.setStyle("-fx-text-fill: #FFB454; -fx-font-family: 'JetBrains Mono', monospace; -fx-font-size: 11px; -fx-font-weight: 800; -fx-letter-spacing: 2px;");
+                titleLbl.getStyleClass().add("mod-confirm-title");
                 headerBar.getChildren().addAll(dot, titleLbl);
 
                 // Body
                 VBox bodyBox = new VBox(10);
-                bodyBox.setPadding(new Insets(20, 22, 20, 22));
+                bodyBox.getStyleClass().add("mod-confirm-body");
                 Label headerLbl = new Label(header);
-                headerLbl.setStyle("-fx-text-fill: #E8EAF1; -fx-font-family: 'Fira Sans', sans-serif; -fx-font-size: 18px; -fx-font-weight: 700;");
+                headerLbl.getStyleClass().add("mod-confirm-header-lbl");
                 headerLbl.setWrapText(true);
                 Label bodyLbl = new Label(body);
-                bodyLbl.setStyle("-fx-text-fill: #8A93AB; -fx-font-family: 'Fira Sans', sans-serif; -fx-font-size: 12px;");
+                bodyLbl.getStyleClass().add("mod-confirm-body-lbl");
                 bodyLbl.setWrapText(true);
                 bodyBox.getChildren().addAll(headerLbl, bodyLbl);
 
                 // Buttons
                 HBox actions = new HBox(8);
-                actions.setAlignment(Pos.CENTER_RIGHT);
-                actions.setPadding(new Insets(0, 22, 18, 22));
+                actions.getStyleClass().add("mod-confirm-actions");
 
                 Button cancelBtn = new Button("Cancelar");
-                cancelBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #8A93AB; -fx-padding: 9 18; -fx-border-color: #1A2030; -fx-border-radius: 6; -fx-cursor: hand;");
-                
+                cancelBtn.getStyleClass().add("mod-confirm-btn-cancel");
+
                 Button okBtn = new Button("Confirmar");
-                okBtn.setStyle("-fx-background-color: #F87171; -fx-text-fill: #0F1320; -fx-font-weight: 800; -fx-padding: 9 18; -fx-background-radius: 6; -fx-cursor: hand;");
+                okBtn.getStyleClass().add("mod-confirm-btn-ok");
 
                 actions.getChildren().addAll(cancelBtn, okBtn);
                 card.getChildren().addAll(headerBar, bodyBox, actions);
                 
                 overlayRoot.getChildren().addAll(backdrop, card);
-                StackPane.setAlignment(card, Pos.CENTER);
+                // QUAL-16: StackPane.setAlignment movido para CSS.
 
                 Runnable close = () -> rootPane.getChildren().remove(overlayRoot);
 

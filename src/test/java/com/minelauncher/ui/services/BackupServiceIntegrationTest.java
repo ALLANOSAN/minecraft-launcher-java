@@ -70,4 +70,46 @@ class BackupServiceIntegrationTest {
         assertThrows(IllegalArgumentException.class,
                 () -> backupService.createSnapshot(null, gameDir, backupBaseDir));
     }
+
+    /**
+     * BUG-5: a sobrecarga (File, File) é usada pelo GameLaunchService para
+     * fazer backup do diretório saves/ inteiro. Garante que ela continua
+     * funcionando após a refatoração.
+     */
+    @Test
+    void testFileOverloadBackupsSavesDir() throws IOException {
+        // Cria um segundo world no savesDir para garantir que TUDO é copiado
+        File otherWorld = new File(gameDir, "saves/otherWorld");
+        otherWorld.mkdirs();
+        Files.writeString(otherWorld.toPath().resolve("data"), "x");
+
+        File savesDir = new File(gameDir, "saves");
+        backupService.createSnapshot(savesDir, backupBaseDir);
+
+        File[] backups = backupBaseDir.listFiles(File::isDirectory);
+        assertNotNull(backups);
+        assertEquals(1, backups.length, "Deve criar um único backup do saves/");
+        File firstBackup = backups[0];
+        assertTrue(firstBackup.getName().startsWith("saves_"),
+                "Nome do backup deve começar com 'saves_' (nome do dir)");
+        // O backup deve conter ambos os worlds dentro
+        assertTrue(new File(firstBackup, "world/level.dat").exists(),
+                "Backup deve conter world/level.dat");
+        assertTrue(new File(firstBackup, "otherWorld/data").exists(),
+                "Backup deve conter otherWorld/data");
+    }
+
+    /**
+     * A sobrecarga (File, File) deve ser no-op silencioso se o dir não existir
+     * (preserva o comportamento original do BackupService).
+     */
+    @Test
+    void testFileOverloadSkipsMissingDir() throws IOException {
+        File missing = new File(gameDir, "nao-existe");
+        backupService.createSnapshot(missing, backupBaseDir);
+
+        File[] backups = backupBaseDir.listFiles();
+        assertNotNull(backups);
+        assertEquals(0, backups.length, "Não deve criar backup de diretório inexistente");
+    }
 }
