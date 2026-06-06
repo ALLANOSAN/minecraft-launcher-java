@@ -31,7 +31,9 @@ public class MineLauncher extends Application {
     @Override
     public void start(Stage stage) {
         primaryStage = stage;
-        SettingsManager.getInstance().load();
+        // BUG-4: load() agora é executado dentro do construtor do singleton;
+        // a chamada explícita aqui era redundante e foi removida.
+        SettingsManager.getInstance(); // força inicialização se ainda não ocorreu
         ShortcutManager.createShortcut();
 
         // Run update check after JavaFX is initialized

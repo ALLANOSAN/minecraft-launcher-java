@@ -35,10 +35,23 @@ public class GameLaunchService {
                 // 0. Backup automático (se configurado)
                 String backupPath = SettingsManager.getInstance().getBackupPath();
                 if (backupPath != null && !backupPath.isBlank()) {
-                    File worldDir = new File(profile.getGameDir() != null ? profile.getGameDir() : SettingsManager.getInstance().getBaseDir().getAbsolutePath());
+                    // BUG-5 + BUG-6: o backup é feito em saves/<worldName> e a
+                    // assinatura do BackupService agora exige (worldName, gameDir).
+                    File gameDir = new File(profile.getGameDir() != null
+                            ? profile.getGameDir()
+                            : SettingsManager.getInstance().getBaseDir().getAbsolutePath());
                     File backupDir = new File(backupPath);
-                    statusUpdater.accept("Realizando backup do mundo...");
-                    backupService.createSnapshot(worldDir, backupDir);
+                    File savesDir = new File(gameDir, "saves");
+                    if (savesDir.isDirectory()) {
+                        File[] worlds = savesDir.listFiles(f -> f.isDirectory()
+                                && new File(f, "level.dat").exists());
+                        if (worlds != null) {
+                            statusUpdater.accept("Realizando backup do mundo...");
+                            for (File world : worlds) {
+                                backupService.createSnapshot(world.getName(), gameDir, backupDir);
+                            }
+                        }
+                    }
                 }
 
                 // 1. Baixar versão vanilla se necessário

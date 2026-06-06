@@ -76,7 +76,9 @@ public class MicrosoftAuth {
                 UUID uuid = UUID.fromString(id.replaceFirst(
                         "(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5"));
 
-                GameProfile gameProfile = new GameProfile(name, uuid, false);
+                // BUG-1: isMicrosoft = true para contas autenticadas via Microsoft.
+                // O construtor define isOffline = !isMicrosoft, então era crucial corrigir isso.
+                GameProfile gameProfile = new GameProfile(name, uuid, true);
                 gameProfile.setAccessToken(mcAccessToken);
 
                 LOG.info("Login Microsoft concluído: {}", name);

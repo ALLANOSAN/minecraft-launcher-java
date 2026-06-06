@@ -67,6 +67,11 @@ public class SettingsManager {
         this.backupPath = configLoader.getProperty("backup.path", "");
 
         LOG.info("Diretório base: {}", baseDir.getAbsolutePath());
+
+        // BUG-4: garante que load() seja executado no momento da construção do
+        // singleton. Antes, qualquer acesso anterior a start() (ex: durante a
+        // inicialização do módulo Guice) pegava apenas os defaults.
+        load();
     }
 
     public static SettingsManager getInstance() { return INSTANCE; }

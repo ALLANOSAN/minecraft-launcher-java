@@ -78,20 +78,12 @@ public class DownloadManager {
             long totalBytes = response.body().contentLength();
             long downloadedBytes = 0;
 
-            try (InputStream is = response.body().byteStream();
-                 FileOutputStream fos = new FileOutputStream(dest)) {
-
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-
-                while ((bytesRead = is.read(buffer)) != -1) {
-                    fos.write(buffer, 0, bytesRead);
-                    downloadedBytes += bytesRead;
-
+            try (InputStream is = response.body().byteStream()) {
+                writeToFile(is, dest, written -> {
                     if (progressCallback != null) {
-                        progressCallback.accept(downloadedBytes, totalBytes);
+                        progressCallback.accept(written, totalBytes);
                     }
-                }
+                });
             }
 
             // Verificar SHA1 após download
@@ -103,6 +95,33 @@ public class DownloadManager {
                             ": esperado " + expectedSha1 + ", obtido " + actualSha1);
                 }
             }
+        }
+    }
+
+    /**
+     * BUG-10: escreve o stream no arquivo, deletando o destino em caso de falha
+     * para não deixar arquivos truncados/parciais em disco.
+     */
+    private void writeToFile(InputStream is, File dest,
+                             java.util.function.LongConsumer onBytesRead) throws IOException {
+        try (FileOutputStream fos = new FileOutputStream(dest)) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            long downloaded = 0;
+            while ((bytesRead = is.read(buffer)) != -1) {
+                fos.write(buffer, 0, bytesRead);
+                downloaded += bytesRead;
+                onBytesRead.accept(downloaded);
+            }
+        } catch (IOException ioe) {
+            // BUG-10: limpa arquivo truncado antes de propagar a exceção.
+            if (dest.exists()) {
+                boolean deleted = dest.delete();
+                if (!deleted) {
+                    LOG.warn("Não foi possível deletar arquivo parcial {}", dest.getAbsolutePath());
+                }
+            }
+            throw ioe;
         }
     }
 

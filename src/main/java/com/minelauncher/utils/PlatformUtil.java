@@ -30,4 +30,29 @@ public final class PlatformUtil {
     public static boolean isLinux() {
         return getOSKey().equals("linux");
     }
+
+    /**
+     * QUAL-15: retorna a chave usada pela Mojang nos runtimes Java —
+     * combina SO + arquitetura (ex.: "windows-x64", "mac-os-arm64", "linux-arm64").
+     * Diferente de {@link #getOSKey()}, que devolve apenas "windows"/"osx"/"linux"
+     * para uso em metadata de mods/libs.
+     */
+    public static String getMojangOSKey() {
+        String os = getOSKey();
+        String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
+        boolean is64 = arch.contains("64");
+        boolean isArm = arch.contains("aarch64") || arch.contains("arm");
+        return switch (os) {
+            case "windows" -> is64 ? "windows-x64" : "windows-x86";
+            case "osx" -> isArm ? "mac-os-arm64" : "mac-os";
+            default -> isArm ? "linux-arm64" : "linux";
+        };
+    }
+
+    /**
+     * QUAL-15: extensão do executável Java (".exe" no Windows, vazio nos demais).
+     */
+    public static String getJavaExecutableExtension() {
+        return isWindows() ? ".exe" : "";
+    }
 }

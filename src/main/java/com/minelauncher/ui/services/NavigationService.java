@@ -25,6 +25,14 @@ public class NavigationService {
         navButtons.forEach((name, btn) -> setActiveNav(btn, name.equals(tab)));
     }
 
+    /**
+     * BUG-2: alias público de {@link #showTab(String)} para que o controller
+     * delegue explicitamente a navegação ao serviço em vez de replicar a lógica.
+     */
+    public void navigate(String tab) {
+        showTab(tab);
+    }
+
     private void setActiveNav(Button btn, boolean active) {
         if (btn == null) return;
         if (active) {

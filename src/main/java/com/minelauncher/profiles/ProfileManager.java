@@ -106,14 +106,18 @@ public class ProfileManager {
                     modLoader = "fabric";
                     String mcVer = readInheritsFrom(lastVersionId);
                     if (mcVer != null) {
-                        modLoaderVersion = lastVersionId.replace("fabric-loader-", "");
+                        // BUG-9: parsing correto. Formato: fabric-loader-{loaderVer}-{mcVer}.
+                        // Antes, lastVersionId.replace("fabric-loader-", "") retornava
+                        // "0.16.5-1.21.4" inteiro. Agora separa apenas a parte do loader.
+                        modLoaderVersion = parseFabricQuiltLoaderVersion(lastVersionId, "fabric-loader-");
                         lastVersionId = mcVer;
                     }
                 } else if (lastVersionId.contains("quilt")) {
                     modLoader = "quilt";
                     String mcVer = readInheritsFrom(lastVersionId);
                     if (mcVer != null) {
-                        modLoaderVersion = lastVersionId;
+                        // BUG-9: mesma lógica do Fabric, formato quilt-loader-{loaderVer}-{mcVer}
+                        modLoaderVersion = parseFabricQuiltLoaderVersion(lastVersionId, "quilt-loader-");
                         lastVersionId = mcVer;
                     }
                 }
@@ -158,6 +162,21 @@ public class ProfileManager {
             LOG.debug("Não foi possível ler inheritsFrom de {}", versionId);
         }
         return null;
+    }
+
+    /**
+     * BUG-9: extrai apenas a versão do loader de uma string no formato
+     * {@code <prefix><loaderVer>-<mcVer>}, ex.: "fabric-loader-0.16.5-1.21.4" → "0.16.5".
+     * O sufixo "-&lt;mcVer&gt;" é identificado por um lookahead de versão
+     * semver-like (X.Y.Z) no fim da string. Se a versão do MC não casar com
+     * o padrão, retorna a parte após o prefixo como fallback.
+     */
+    private String parseFabricQuiltLoaderVersion(String versionId, String prefix) {
+        String stripped = versionId.startsWith(prefix)
+                ? versionId.substring(prefix.length())
+                : versionId;
+        String[] parts = stripped.split("-(?=\\d+\\.\\d+\\.\\d+$)");
+        return parts.length > 0 ? parts[0] : stripped;
     }
 
     private void parseRamFromArgs(String args, LaunchProfile profile) {

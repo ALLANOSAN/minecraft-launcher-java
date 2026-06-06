@@ -8,6 +8,7 @@ import com.minelauncher.ui.services.VersionInstallationService;
 import com.minelauncher.ui.services.GameLaunchService;
 import com.minelauncher.ui.services.NavigationService;
 import com.minelauncher.ui.services.LauncherStateService;
+import static com.minelauncher.ui.services.LauncherStateService.LauncherState;
 import com.minelauncher.ui.services.WindowService;
 import com.minelauncher.launcher.GameLauncher;
 import java.util.Map;
@@ -224,9 +225,8 @@ public class MainController implements Initializable {
     private final List<String> screenshotsFull = new ArrayList<>();
 
     // ── Live status / clock / RAM / net ──
-    private enum LauncherState {
-        READY, BUSY, PLAYING, ERROR
-    }
+    // QUAL-12: enum LauncherState removido daqui; agora vive em
+    // LauncherStateService e é importado estaticamente.
 
     private long sessionStartMs = System.currentTimeMillis();
     private volatile boolean netOnline = true;
@@ -329,7 +329,8 @@ public class MainController implements Initializable {
         
         this.navigationService.setDependencies(panes, navButtons);
         this.stateService.setSessionStatusLabel(sessionStatusLabel);
-        this.windowService.setUI(stage, this::stopLiveUpdates);
+        // BUG-8: windowService.setUI foi movido para setStage() — aqui
+        // 'stage' ainda é null porque initialize() roda antes de setStage().
         this.versionInstallationService.setUI(statusLabel, progressBar);
         this.authService.setUI(
             this::showDeviceCodeOverlay,
@@ -347,6 +348,9 @@ public class MainController implements Initializable {
 
     public void setStage(Stage stage) {
         this.stage = stage;
+        // BUG-8: windowService.setUI agora é chamado aqui, depois que 'stage'
+        // foi atribuído. Antes, era chamado dentro de initialize() com stage = null.
+        this.windowService.setUI(stage, this::stopLiveUpdates);
     }
 
     private void setupUI() {
@@ -838,11 +842,19 @@ public class MainController implements Initializable {
             return;
         }
 
-        int index = saveList.getSelectionModel().getSelectedIndex();
-        if (index < 0 || index >= savesFull.size())
+        // BUG-3: o índice da lista filtrada não corresponde ao índice em savesFull.
+        // Extrai o nome real do mundo a partir do item selecionado (descartando
+        // qualquer prefixo tipo "[Save] ") e busca-o em savesFull.
+        String worldName = selected.replace("[Save] ", "").trim();
+        if (!savesFull.contains(worldName) && savesFull.contains(selected)) {
+            worldName = selected;
+        }
+        if (!savesFull.contains(worldName)) {
+            statusLabel.setText("Save não encontrado na lista");
             return;
+        }
+        final String resolvedWorldName = worldName;
 
-        String worldName = savesFull.get(index);
         LaunchProfile profile = profileManager.getActiveProfile();
         if (profile == null)
             return;
@@ -854,22 +866,24 @@ public class MainController implements Initializable {
             return;
         }
 
+        // BUG-6: pasta de destino dos snapshots (mesma convenção de antes,
+        // gameDir/backups/). O nome do snapshot é gerado dentro do BackupService.
         File backupDir = new File(gameDir, "backups");
         backupDir.mkdirs();
-
-        String timestamp = java.time.LocalDateTime.now(BRAZIL_ZONE)
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm"));
-        File backupFile = new File(backupDir, worldName + "_" + timestamp + ".zip");
+        final File resolvedGameDir = gameDir;
+        final File resolvedBackupDir = backupDir;
 
         statusLabel.setText("Fazendo backup de " + worldName + "...");
         progressBar.setProgress(-1);
 
         new Thread(() -> {
             try {
-                zipDirectory(worldDir, backupFile);
+                // BUG-6: usa o BackupService (injetado) em vez de zipDirectory/zipFiles
+                // duplicados. Assinatura: (worldName, gameDir, backupBaseDir).
+                backupService.createSnapshot(resolvedWorldName, resolvedGameDir, resolvedBackupDir);
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
-                    statusLabel.setText("Backup criado: " + backupFile.getName());
+                    statusLabel.setText("Backup criado para " + resolvedWorldName);
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
@@ -880,66 +894,19 @@ public class MainController implements Initializable {
         }).start();
     }
 
-    private void zipDirectory(File sourceDir, File zipFile) throws IOException {
-        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new FileOutputStream(zipFile))) {
-            zipFiles(sourceDir, sourceDir, zos);
-        }
-    }
-
-    private void zipFiles(File rootDir, File sourceFile, java.util.zip.ZipOutputStream zos) throws IOException {
-        if (sourceFile.isDirectory()) {
-            for (File child : sourceFile.listFiles()) {
-                zipFiles(rootDir, child, zos);
-            }
-        } else {
-            String entryName = rootDir.toPath().relativize(sourceFile.toPath()).toString();
-            zos.putNextEntry(new java.util.zip.ZipEntry(entryName));
-            try (FileInputStream fis = new FileInputStream(sourceFile)) {
-                byte[] buffer = new byte[8192];
-                int len;
-                while ((len = fis.read(buffer)) > 0) {
-                    zos.write(buffer, 0, len);
-                }
-            }
-            zos.closeEntry();
-        }
-    }
+    // BUG-6: zipDirectory/zipFiles removidos — backup agora é responsabilidade
+    // exclusiva do BackupService injetado, evitando dois mecanismos paralelos
+    // (zip vs. cópia de diretório) com comportamentos divergentes.
 
     @FXML
     private void showSettings() {
         showTab("settings");
     }
 
+    // BUG-2: showTab() agora é um wrapper fino que delega ao NavigationService.
+    // A lógica duplicada de visibilidade/active class foi removida.
     private void showTab(String tab) {
-        homePane.setVisible(tab.equals("home"));
-        versionsPane.setVisible(tab.equals("versions"));
-        modsPane.setVisible(tab.equals("mods"));
-        resourcePacksPane.setVisible(tab.equals("resourcePacks"));
-        savesPane.setVisible(tab.equals("saves"));
-        screenshotsPane.setVisible(tab.equals("screenshots"));
-        settingsPane.setVisible(tab.equals("settings"));
-
-        setActiveNav(homeBtn, tab.equals("home"));
-        setActiveNav(versionsBtn, tab.equals("versions"));
-        setActiveNav(modsBtn, tab.equals("mods"));
-        setActiveNav(resourcePacksBtn, tab.equals("resourcePacks"));
-        setActiveNav(savesBtn, tab.equals("saves"));
-        setActiveNav(screenshotsBtn, tab.equals("screenshots"));
-        setActiveNav(settingsBtn, tab.equals("settings"));
-    }
-
-    private void setActiveNav(Button btn, boolean active) {
-        if (btn == null)
-            return;
-        if (active) {
-            if (!btn.getStyleClass().contains("active")) {
-                btn.getStyleClass().add("active");
-            }
-            btn.setOpacity(1.0);
-        } else {
-            btn.getStyleClass().remove("active");
-            btn.setOpacity(0.78);
-        }
+        navigationService.navigate(tab);
     }
 
     private void pulsePlayButton() {
@@ -1028,31 +995,12 @@ public class MainController implements Initializable {
 
     // ==================== STATE MACHINE ====================
 
+    // QUAL-12: setState() delega para LauncherStateService, que é o dono
+    // legítimo da enum e da lógica de estilo/texto. Evita a duplicação
+    // que existia entre controller e service.
     private void setState(LauncherState newState) {
-        if (sessionStatusLabel == null)
-            return;
-
-        String text;
-        String styleClass;
-        switch (newState) {
-            case BUSY:
-                text = "● BUSY";
-                styleClass = "session-chip-warm";
-                break;
-            case PLAYING:
-                text = "● PLAYING";
-                styleClass = "session-chip-cool";
-                break;
-            case ERROR:
-                text = "● ERROR";
-                styleClass = "session-chip-danger";
-                break;
-            default:
-                text = "● READY";
-                styleClass = "session-chip-accent";
-        }
-        sessionStatusLabel.setText(text);
-        com.minelauncher.ui.utils.JavaFxUtils.swapClass(sessionStatusLabel, SESSION_VARIANTS, styleClass);
+        if (sessionStatusLabel == null) return;
+        stateService.setState(newState);
     }
 
     public void setBusy() {
@@ -1135,26 +1083,26 @@ public class MainController implements Initializable {
         if (contentPane == null) return;
 
         deviceCodeOverlay = new StackPane();
-        deviceCodeOverlay.setStyle("-fx-background-color: rgba(0,0,0,0.7);");
-        
+        deviceCodeOverlay.getStyleClass().add("device-code-overlay");
+
         VBox card = new VBox(20);
         card.setAlignment(javafx.geometry.Pos.CENTER);
-        card.setStyle("-fx-background-color: #121826; -fx-padding: 40; -fx-background-radius: 16; -fx-border-color: #2a3349; -fx-border-radius: 16;");
+        card.getStyleClass().add("device-code-card");
         card.setMaxSize(500, 350);
 
         Label title = new Label("LOGIN MICROSOFT");
-        title.setStyle("-fx-text-fill: #9EFF8E; -fx-font-weight: 800; -fx-font-size: 18px; -fx-letter-spacing: 2px;");
+        title.getStyleClass().add("device-code-title");
 
         Label instructions = new Label("Acesse a URL abaixo e digite o código:");
-        instructions.setStyle("-fx-text-fill: #c0c8d8; -fx-font-size: 14px;");
+        instructions.getStyleClass().add("device-code-instructions");
 
         TextField codeField = new TextField(dcr.user_code());
         codeField.setEditable(false);
         codeField.setAlignment(javafx.geometry.Pos.CENTER);
-        codeField.setStyle("-fx-background-color: #1a2236; -fx-text-fill: #ffffff; -fx-font-family: 'JetBrains Mono', monospace; -fx-font-size: 28px; -fx-font-weight: 800; -fx-padding: 15; -fx-border-color: #2a3349; -fx-border-radius: 8;");
+        codeField.getStyleClass().add("device-code-field");
 
         Hyperlink urlLink = new Hyperlink(dcr.verification_uri());
-        urlLink.setStyle("-fx-text-fill: #7DD3FC; -fx-font-size: 14px;");
+        urlLink.getStyleClass().add("device-code-link");
         urlLink.setOnAction(e -> {
             try {
                 java.awt.Desktop.getDesktop().browse(new java.net.URI(dcr.verification_uri()));
@@ -1164,7 +1112,7 @@ public class MainController implements Initializable {
         });
 
         HBox actions = new HBox(15);
-        actions.setAlignment(javafx.geometry.Pos.CENTER);
+        actions.getStyleClass().add("device-code-actions");
 
         Button copyBtn = new Button("Copiar Código");
         copyBtn.getStyleClass().add("btn-secondary");
@@ -1333,91 +1281,83 @@ public class MainController implements Initializable {
             return;
         }
 
+        String css = getClass().getResource("/css/dark-theme.css").toExternalForm();
+
+        // QUAL-14: estilos movidos do Java para CSS (classes .profile-settings-*).
+        // Mantém a montagem dos nós no controller (lógica) e o visual no CSS (apresentação).
+
         // Overlay backdrop
         StackPane overlay = new StackPane();
-        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.6);");
+        overlay.getStyleClass().add("profile-settings-overlay");
         overlay.setPickOnBounds(true);
         overlay.setVisible(true);
 
         // Card container
         VBox card = new VBox(20);
-        card.setStyle(
-                "-fx-background-color: #121826; -fx-background-radius: 16; -fx-border-color: #2a3349; -fx-border-radius: 16;");
+        card.getStyleClass().add("profile-settings-card");
         card.setPrefWidth(540);
         card.setMaxWidth(540);
         card.setMaxHeight(520);
-        card.setEffect(new javafx.scene.effect.DropShadow(24, 0, 6, javafx.scene.paint.Color.rgb(0, 0, 0, 0.7)));
-
-        String css = getClass().getResource("/css/dark-theme.css").toExternalForm();
 
         // Header
         HBox header = new HBox(12);
-        header.setPadding(new javafx.geometry.Insets(18, 20, 0, 20));
+        header.getStyleClass().add("profile-settings-header");
         header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         Label title = new Label("Configurar: " + profile.getName());
-        title.setStyle("-fx-text-fill: #ffffff; -fx-font-size: 18px; -fx-font-weight: 800;");
+        title.getStyleClass().add("profile-settings-title");
         Region spacer = new Region();
         HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
         Button closeBtn = new Button();
-        closeBtn.setStyle(
-                "-fx-background-color: transparent; -fx-background-radius: 6; -fx-padding: 4; -fx-cursor: hand;");
-        closeBtn.getStyleClass().add("window-btn");
+        closeBtn.getStyleClass().addAll("window-btn", "profile-settings-close-btn");
         closeBtn.setGraphic(new javafx.scene.shape.SVGPath());
-        ((javafx.scene.shape.SVGPath) closeBtn.getGraphic()).setContent("M6 6l12 12 M18 6L6 18");
         ((javafx.scene.shape.SVGPath) closeBtn.getGraphic())
-                .setStyle("-fx-stroke: #9ba3b8; -fx-stroke-width: 1.8; -fx-fill: transparent;");
+                .setContent("M6 6l12 12 M18 6L6 18");
+        ((javafx.scene.shape.SVGPath) closeBtn.getGraphic()).getStyleClass().add("svg-path");
         closeBtn.setOnAction(e -> contentPane.getChildren().remove(overlay));
         header.getChildren().addAll(title, spacer, closeBtn);
 
         // Grid content
         javafx.scene.layout.GridPane grid = new javafx.scene.layout.GridPane();
+        grid.getStyleClass().addAll("profile-settings-grid", "profile-settings-grid-padded");
         grid.setHgap(12);
         grid.setVgap(12);
-        grid.setPadding(new javafx.geometry.Insets(12, 20, 8, 20));
-        grid.setStyle("-fx-background-color: #121826;");
 
         // RAM
         TextField ramField = new TextField(String.valueOf(profile.getMaxRam()));
-        ramField.setStyle(
-                "-fx-background-color: #1a2236; -fx-text-fill: #e8ebf3; -fx-border-color: #2a3349; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 8 12; -fx-pref-width: 120;");
+        ramField.getStyleClass().addAll("profile-settings-field", "profile-settings-field-ram");
         Label ramUnit = new Label("MB");
-        ramUnit.setStyle("-fx-text-fill: #5fcc6e; -fx-font-weight: bold; -fx-font-size: 13px;");
+        ramUnit.getStyleClass().add("profile-settings-unit");
         HBox ramBox = new HBox(8, ramField, ramUnit);
 
         // Java Path
         TextField javaPathField = new TextField(profile.getJavaPath() != null ? profile.getJavaPath() : "");
         javaPathField.setPromptText("Auto-detectar");
-        javaPathField.setStyle(
-                "-fx-background-color: #1a2236; -fx-text-fill: #e8ebf3; -fx-border-color: #2a3349; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 8 12;");
+        javaPathField.getStyleClass().add("profile-settings-field");
 
         // JVM Args
         TextField jvmArgsField = new TextField(String.join(" ", profile.getJvmArgs()));
         jvmArgsField.setPromptText("Ex: -XX:+UseG1GC -XX:MaxGCPauseMillis=50");
-        jvmArgsField.setStyle(
-                "-fx-background-color: #1a2236; -fx-text-fill: #e8ebf3; -fx-border-color: #2a3349; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 8 12;");
+        jvmArgsField.getStyleClass().add("profile-settings-field");
 
         // Resolução
         TextField widthField = new TextField(String.valueOf(profile.getWidth()));
-        widthField.setStyle(
-                "-fx-background-color: #1a2236; -fx-text-fill: #e8ebf3; -fx-border-color: #2a3349; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 8 12; -fx-pref-width: 80;");
+        widthField.getStyleClass().addAll("profile-settings-field", "profile-settings-field-narrow");
         TextField heightField = new TextField(String.valueOf(profile.getHeight()));
-        heightField.setStyle(
-                "-fx-background-color: #1a2236; -fx-text-fill: #e8ebf3; -fx-border-color: #2a3349; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 8 12; -fx-pref-width: 80;");
+        heightField.getStyleClass().addAll("profile-settings-field", "profile-settings-field-narrow");
         javafx.scene.control.CheckBox fullscreenCheck = new javafx.scene.control.CheckBox("Tela cheia");
         fullscreenCheck.setSelected(profile.isFullscreen());
-        fullscreenCheck.setStyle("-fx-text-fill: #c0c8d8;");
+        fullscreenCheck.getStyleClass().add("profile-settings-checkbox");
 
-        var fieldStyle = "-fx-text-fill: #9ba3b8; -fx-font-size: 13px;";
         var labelRam = new Label("RAM Máxima:");
-        labelRam.setStyle(fieldStyle);
+        labelRam.getStyleClass().add("profile-settings-label");
         var labelJava = new Label("Java Path:");
-        labelJava.setStyle(fieldStyle);
+        labelJava.getStyleClass().add("profile-settings-label");
         var labelJvm = new Label("JVM Args:");
-        labelJvm.setStyle(fieldStyle);
+        labelJvm.getStyleClass().add("profile-settings-label");
         var labelW = new Label("Largura:");
-        labelW.setStyle(fieldStyle);
+        labelW.getStyleClass().add("profile-settings-label");
         var labelH = new Label("Altura:");
-        labelH.setStyle(fieldStyle);
+        labelH.getStyleClass().add("profile-settings-label");
 
         grid.add(labelRam, 0, 0);
         grid.add(ramBox, 1, 0);
@@ -1433,17 +1373,14 @@ public class MainController implements Initializable {
 
         // Action buttons
         HBox actions = new HBox(10);
-        actions.setPadding(new javafx.geometry.Insets(4, 20, 18, 20));
-        actions.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+        actions.getStyleClass().addAll("profile-settings-actions", "profile-settings-actions-padded");
 
         Button cancelBtn = new Button("Cancelar");
-        cancelBtn.setStyle(
-                "-fx-background-color: #1a2236; -fx-text-fill: #c0c8d8; -fx-font-weight: 700; -fx-background-radius: 10; -fx-padding: 10 22; -fx-cursor: hand; -fx-border-color: #2a3349; -fx-border-radius: 10; -fx-font-size: 13px;");
+        cancelBtn.getStyleClass().add("profile-settings-btn-cancel");
         cancelBtn.setOnAction(e -> contentPane.getChildren().remove(overlay));
 
         Button saveBtn = new Button("Salvar");
-        saveBtn.setStyle(
-                "-fx-background-color: linear-gradient(to right, #5fcc6e, #2ea84a); -fx-text-fill: #0a0e1a; -fx-font-weight: 800; -fx-background-radius: 10; -fx-padding: 10 22; -fx-cursor: hand; -fx-font-size: 13px;");
+        saveBtn.getStyleClass().add("profile-settings-btn-save");
         saveBtn.setOnAction(e -> {
             profile.setMaxRam(parseRam(ramField));
             String jp = javaPathField.getText().trim();

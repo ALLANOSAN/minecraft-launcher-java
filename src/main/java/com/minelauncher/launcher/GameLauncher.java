@@ -119,23 +119,14 @@ public class GameLauncher {
         //    Caminho: ~/.minecraft/runtime/<component>/<os>/<component>/bin/java
         if (detail.getJavaVersion() != null && detail.getJavaVersion().getComponent() != null) {
             String component = detail.getJavaVersion().getComponent();
-            String os = System.getProperty("os.name").toLowerCase();
             String home = System.getProperty("user.home");
 
-            String osKey;
-            if (os.contains("win")) {
-                String arch = System.getProperty("os.arch");
-                osKey = arch.contains("64") ? "windows-x64" : "windows-x86";
-            } else if (os.contains("mac")) {
-                String arch = System.getProperty("os.arch");
-                osKey = arch.contains("aarch64") || arch.contains("arm") ? "mac-os-arm64" : "mac-os";
-            } else {
-                String arch = System.getProperty("os.arch");
-                osKey = arch.contains("aarch64") || arch.contains("arm") ? "linux-arm64" : "linux";
-            }
+            // QUAL-15: usa PlatformUtil para detectar OS+arch e extensão do executável
+            // em vez do bloco if/else duplicado que existia aqui.
+            String osKey = com.minelauncher.utils.PlatformUtil.getMojangOSKey();
+            String ext = com.minelauncher.utils.PlatformUtil.getJavaExecutableExtension();
 
             // Tentar os dois formatos de caminho que a Mojang usa
-            String ext = os.contains("win") ? ".exe" : "";
             String[] candidates = {
                 java.nio.file.Paths.get(home, ".minecraft", "runtime", component, osKey, component, "bin", "java" + ext).toString(),
                 java.nio.file.Paths.get(home, ".minecraft", "runtime", component, osKey, "bin", "java" + ext).toString(),

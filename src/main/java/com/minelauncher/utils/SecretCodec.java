@@ -34,6 +34,29 @@ import java.util.Set;
 public final class SecretCodec {
     private static final Logger LOG = LoggerFactory.getLogger(SecretCodec.class);
 
+    /**
+     * Chave AES de 256 bits usada para cifrar tokens persistidos em
+     * {@code launcher_accounts.json}. É carregada de
+     * {@code ~/.minelauncher/secret.key} na primeira chamada a
+     * {@link #loadOrGenerateKey()}.
+     *
+     * <p><b>QUAL-11 — Consequências da perda de {@code secret.key}:</b>
+     * <ul>
+     *   <li>O usuário terá que reautenticar via Microsoft OAuth — não há
+     *       mecanismo de "reset de chave" que preserve tokens antigos.</li>
+     *   <li>Todos os tokens persistidos (access/refresh tokens do Minecraft)
+     *       tornam-se ilegíveis e o launcher não consegue renová-los
+     *       automaticamente.</li>
+     *   <li>A chave é regenerada a partir de {@link MachineIdentifier} quando
+     *       ausente, mas essa nova chave é <b>distinta</b> da anterior —
+     *       tokens cifrados com a chave antiga não podem ser decifrados
+     *       pela nova.</li>
+     *   <li>A solução de longo prazo é implementar backup automático do
+     *       arquivo de chave, ou — preferencialmente — armazenar tokens em
+     *       cofres do sistema operacional: DPAPI (Windows), Keychain (macOS)
+     *       ou libsecret (Linux) via JNA, já disponível em {@code pom.xml}.</li>
+     * </ul>
+     */
     private static final byte[] KEY = loadOrGenerateKey();
 
     private SecretCodec() {}

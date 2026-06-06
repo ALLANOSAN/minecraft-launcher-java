@@ -31,6 +31,11 @@ public class VersionManager {
     private final DownloadManager downloader;
     private final Gson gson = new Gson();
     private VersionInfo.VersionManifest cachedManifest;
+    // QUAL-13: carimbo de tempo do cache do manifest para evitar re-fetchs
+    // desnecessários dentro de uma janela curta. O manifest da Mojang muda
+    // apenas quando uma nova versão é lançada, então 5 minutos é seguro.
+    private long cachedManifestAt = 0L;
+    private static final long MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000L;
 
     public VersionManager(File baseDir) {
         this.baseDir = baseDir;
@@ -41,7 +46,13 @@ public class VersionManager {
      * Obtém o manifest de versões da Mojang
      */
     public VersionInfo.VersionManifest getVersionManifest() throws IOException {
-        if (cachedManifest != null) return cachedManifest;
+        // QUAL-13: cache com TTL — manifest da Mojang muda raramente (apenas
+        // em lançamento de versão), então 5 minutos é seguro e evita refetch
+        // a cada installVersion()/getVersionDetail() durante uma mesma sessão.
+        long now = System.currentTimeMillis();
+        if (cachedManifest != null && (now - cachedManifestAt) < MANIFEST_CACHE_TTL_MS) {
+            return cachedManifest;
+        }
 
         Request request = new Request.Builder().url(VERSION_MANIFEST_URL).build();
         // FIX H-5: usa singleton HttpClient em vez de criar novo OkHttpClient
@@ -51,6 +62,7 @@ public class VersionManager {
 
             String json = response.body().string();
             cachedManifest = gson.fromJson(json, VersionInfo.VersionManifest.class);
+            cachedManifestAt = now;
             return cachedManifest;
         }
     }
@@ -176,78 +188,42 @@ public class VersionManager {
         JsonObject objects = JsonParser.parseString(json).getAsJsonObject().getAsJsonObject("objects");
 
         int total = objects.size();
-        java.util.concurrent.atomic.AtomicInteger current = new java.util.concurrent.atomic.AtomicInteger(0);
-        java.util.concurrent.atomic.AtomicInteger failed = new java.util.concurrent.atomic.AtomicInteger(0);
+        if (total == 0) return;
 
         int threadCount = com.minelauncher.settings.SettingsManager.getInstance().getDownloadThreads();
         if (threadCount <= 0 || threadCount > 32) {
             threadCount = 8;
         }
 
-        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
-        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(total);
-
+        // BUG-7: monta a lista de tarefas e delega ao helper downloadParallel.
+        List<Runnable> assetTasks = new ArrayList<>(total);
         for (Map.Entry<String, com.google.gson.JsonElement> entry : objects.entrySet()) {
             String hash = entry.getValue().getAsJsonObject().get("hash").getAsString();
             String prefix = hash.substring(0, 2);
             String url = "https://resources.download.minecraft.net/" + prefix + "/" + hash;
             File dest = new File(baseDir, "assets/objects/" + prefix + "/" + hash);
-
-            pool.submit(() -> {
+            assetTasks.add(() -> {
                 try {
                     downloader.download(url, dest, hash, null);
-                    current.incrementAndGet();
                 } catch (Exception e) {
-                    failed.incrementAndGet();
                     LOG.debug("Falha ao baixar asset hash={}: {}", hash, e.getMessage());
-                } finally {
-                    latch.countDown();
-                    try {
-                        int done = current.get() + failed.get();
-                        if (progress != null && (done % 50 == 0 || done == total)) {
-                            progress.accept("Assets: " + done + "/" + total + (failed.get() > 0 ? " (" + failed.get() + " falhas)" : ""),
-                                    0.25 + ((double) done / total) * 0.35);
-                        }
-                    } catch (Exception e) {
-                        LOG.debug("Erro ao reportar progresso do download de assets", e);
-                    }
+                    throw new RuntimeException(e);
                 }
             });
         }
 
-        try {
-            if (!latch.await(30, TimeUnit.MINUTES)) {
-                LOG.warn("Download de assets excedeu o tempo limite");
-                pool.shutdownNow();
+        BiConsumer<String, Double> assetsProgress = (msg, pct) -> {
+            if (progress != null) {
+                progress.accept(msg, 0.25 + pct * 0.35);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            LOG.warn("Download de assets interrompido");
-            pool.shutdownNow();
-            throw new IOException("Download de assets interrompido", e);
-        } finally {
-            pool.shutdown();
-            try {
-                if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
-                    pool.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                pool.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        if (failed.get() > 0) {
-            LOG.warn("Download de assets concluído com {} falhas de um total de {}", failed.get(), total);
-        } else {
-            LOG.info("Download de todos os {} assets concluído com sucesso", total);
-        }
+        };
+        downloadParallel(assetTasks, threadCount, "Assets", assetsProgress);
     }
 
     private void downloadLibraries(VersionDetail detail, BiConsumer<String, Double> progress) throws IOException {
         List<VersionDetail.Library> libraries = detail.getLibraries();
         List<VersionDetail.DownloadFile> toDownload = new ArrayList<>();
-        
+
         for (VersionDetail.Library lib : libraries) {
             if (!lib.isAllowed()) continue;
 
@@ -275,36 +251,73 @@ public class VersionManager {
         int total = toDownload.size();
         if (total == 0) return;
 
-        java.util.concurrent.atomic.AtomicInteger current = new java.util.concurrent.atomic.AtomicInteger(0);
-        java.util.concurrent.atomic.AtomicInteger failed = new java.util.concurrent.atomic.AtomicInteger(0);
-
         int threadCount = com.minelauncher.settings.SettingsManager.getInstance().getDownloadThreads();
         if (threadCount <= 0 || threadCount > 32) {
             threadCount = 8;
         }
 
-        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
-        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(total);
-
+        // BUG-7: monta a lista de tarefas e delega ao helper downloadParallel.
+        List<Runnable> libTasks = new ArrayList<>(total);
         for (VersionDetail.DownloadFile artifact : toDownload) {
             File dest = new File(baseDir, "libraries/" + artifact.getPath());
-            pool.submit(() -> {
+            libTasks.add(() -> {
                 try {
                     downloader.download(artifact.getUrl(), dest, artifact.getSha1(), null);
-                    current.incrementAndGet();
+                } catch (Exception e) {
+                    LOG.warn("Falha ao baixar library {}: {}", dest.getName(), e.getMessage());
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+
+        BiConsumer<String, Double> libsProgress = (msg, pct) -> {
+            if (progress != null) {
+                progress.accept(msg, 0.6 + pct * 0.1);
+            }
+        };
+        try {
+            downloadParallel(libTasks, threadCount, "Bibliotecas", libsProgress);
+        } catch (IOException ioe) {
+            // Mantém a IOException original para o caller decidir
+            throw ioe;
+        }
+    }
+
+    /**
+     * BUG-7: helper que encapsula o padrão ExecutorService + CountDownLatch +
+     * cleanup usado por downloadAssets e downloadLibraries. Reporta progresso
+     * a cada task concluída via {@code progress} (msg, fração 0..1 dentro do
+     * lote). Aplica timeout de 30 min e propaga InterruptedException como
+     * IOException.
+     */
+    private void downloadParallel(List<Runnable> tasks, int threads, String label,
+                                  BiConsumer<String, Double> progress) throws IOException {
+        int total = tasks.size();
+        if (total == 0) return;
+
+        int threadCount = threads > 0 && threads <= 32 ? threads : 8;
+        java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        java.util.concurrent.CountDownLatch latch =
+                new java.util.concurrent.CountDownLatch(total);
+        java.util.concurrent.atomic.AtomicInteger failed =
+                new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger done =
+                new java.util.concurrent.atomic.AtomicInteger(0);
+
+        for (Runnable task : tasks) {
+            pool.submit(() -> {
+                try {
+                    task.run();
                 } catch (Exception e) {
                     failed.incrementAndGet();
-                    LOG.warn("Falha ao baixar library {}: {}", dest.getName(), e.getMessage());
                 } finally {
+                    int d = done.incrementAndGet();
                     latch.countDown();
-                    try {
-                        int done = current.get() + failed.get();
-                        if (progress != null) {
-                            progress.accept("Bibliotecas: " + done + "/" + total + (failed.get() > 0 ? " (" + failed.get() + " falhas)" : ""),
-                                    0.6 + ((double) done / total) * 0.1);
-                        }
-                    } catch (Exception e) {
-                        LOG.debug("Erro ao reportar progresso do download de libraries", e);
+                    if (progress != null) {
+                        String suffix = failed.get() > 0 ? " (" + failed.get() + " falhas)" : "";
+                        progress.accept(label + ": " + d + "/" + total + suffix,
+                                (double) d / total);
                     }
                 }
             });
@@ -312,14 +325,14 @@ public class VersionManager {
 
         try {
             if (!latch.await(30, TimeUnit.MINUTES)) {
-                LOG.warn("Download de bibliotecas excedeu o tempo limite");
+                LOG.warn("Download de {} excedeu o tempo limite", label);
                 pool.shutdownNow();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            LOG.warn("Download de bibliotecas interrompido");
+            LOG.warn("Download de {} interrompido", label);
             pool.shutdownNow();
-            throw new IOException("Download de bibliotecas interrompido", e);
+            throw new IOException("Download de " + label + " interrompido", e);
         } finally {
             pool.shutdown();
             try {
@@ -333,7 +346,15 @@ public class VersionManager {
         }
 
         if (failed.get() > 0) {
-            throw new IOException("Falha ao baixar " + failed.get() + " bibliotecas do total de " + total);
+            if ("Assets".equals(label)) {
+                LOG.warn("Download de assets concluído com {} falhas de um total de {}",
+                        failed.get(), total);
+            } else {
+                throw new IOException("Falha ao baixar " + failed.get()
+                        + " bibliotecas do total de " + total);
+            }
+        } else {
+            LOG.info("Download de {} concluído com sucesso ({} itens)", label, total);
         }
     }
 
