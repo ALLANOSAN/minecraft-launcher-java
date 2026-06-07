@@ -15,6 +15,18 @@ public class BackupService {
     private static final int MAX_BACKUPS = 3;
 
     /**
+     * Regex defensiva para worldName: aceita letras Unicode, dígitos,
+     * espaços, hífen, sublinhado e ponto. Rejeita separadores de path
+     * (/, \, NUL) e qualquer caractere fora desse conjunto.
+     * <p>INFO-1 do security-review: o caller atual ({@code MainController.backupWorld})
+     * já passa apenas nomes vindos de {@code File.listFiles()}, então
+     * esta validação é redundante na prática — mas fecha a API surface
+     * contra um caller futuro que receba {@code worldName} de input externo.
+     */
+    private static final java.util.regex.Pattern SAFE_WORLD_NAME =
+            java.util.regex.Pattern.compile("[\\p{L}\\p{N} \\-_.]+");
+
+    /**
      * Cria um snapshot de um mundo específico.
      *
      * <p><b>HIGH-9 do code-review:</b> a checagem de symlinks + Zip Slip
@@ -28,10 +40,27 @@ public class BackupService {
      * @param worldName      nome da pasta do mundo (dentro de gameDir/saves/)
      * @param gameDir        diretório-raiz do perfil (.minecraft ou custom)
      * @param backupBaseDir  pasta onde os snapshots são guardados
+     * @throws IllegalArgumentException se {@code worldName} for null, blank,
+     *         contiver separador de path, NUL ou caractere fora do conjunto
+     *         seguro (defesa contra path traversal — INFO-1 do security-review)
      */
     public void createSnapshot(String worldName, File gameDir, File backupBaseDir) throws IOException {
         if (worldName == null || worldName.isBlank()) {
             throw new IllegalArgumentException("worldName é obrigatório");
+        }
+        // INFO-1: rejeita path traversal e chars de controle antes de montar
+        // o File. Defesa em profundidade: o caller já passa nomes seguros
+        // (vindos de File.listFiles()), mas a API pública não pode confiar nisso.
+        // "." e ".." são casos especiais — a regex abaixo os aceitaria (são dots),
+        // mas semanticamente eles escapam do diretório saves/ (new File("saves/..")
+        // resolve para o gameDir pai).
+        if (worldName.equals(".") || worldName.equals("..")
+                || worldName.contains("/") || worldName.contains("\\")
+                || worldName.indexOf('\0') >= 0
+                || !SAFE_WORLD_NAME.matcher(worldName).matches()) {
+            throw new IllegalArgumentException(
+                    "worldName inválido (path traversal ou caractere de controle): \""
+                            + worldName.replace("\0", "?") + "\"");
         }
         File worldDir = new File(gameDir, "saves/" + worldName);
         if (!worldDir.exists()) return;

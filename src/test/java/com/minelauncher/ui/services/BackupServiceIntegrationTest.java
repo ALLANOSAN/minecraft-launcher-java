@@ -98,6 +98,51 @@ class BackupServiceIntegrationTest {
     }
 
     /**
+     * INFO-1 do security-review: a sobrecarga (String, File, File) não
+     * sanitizava worldName. Caller atual passa nomes seguros
+     * (File.listFiles()), mas a API surface precisa fechar contra
+     * path traversal e chars de controle.
+     */
+    @Test
+    void testRejectsPathTraversalInWorldName() {
+        // Path traversal clássicos — todos devem lançar IAE
+        assertThrows(IllegalArgumentException.class,
+                () -> backupService.createSnapshot("../etc/passwd", gameDir, backupBaseDir));
+        assertThrows(IllegalArgumentException.class,
+                () -> backupService.createSnapshot("..\\windows\\system32", gameDir, backupBaseDir));
+        assertThrows(IllegalArgumentException.class,
+                () -> backupService.createSnapshot("foo/bar", gameDir, backupBaseDir));
+        assertThrows(IllegalArgumentException.class,
+                () -> backupService.createSnapshot("foo\\bar", gameDir, backupBaseDir));
+        // NUL byte injection
+        assertThrows(IllegalArgumentException.class,
+                () -> backupService.createSnapshot("foo\0bar", gameDir, backupBaseDir));
+        // ".." sozinho (caso especial de path traversal)
+        assertThrows(IllegalArgumentException.class,
+                () -> backupService.createSnapshot("..", gameDir, backupBaseDir));
+        // Chars fora do conjunto seguro
+        assertThrows(IllegalArgumentException.class,
+                () -> backupService.createSnapshot("foo<bar", gameDir, backupBaseDir));
+        assertThrows(IllegalArgumentException.class,
+                () -> backupService.createSnapshot("foo|bar", gameDir, backupBaseDir));
+    }
+
+    /**
+     * INFO-1: nomes de mundo legítimos (Unicode, espaços, hífen, sublinhado,
+     * ponto) devem continuar sendo aceitos. Não rejeitar por excesso de
+     * zelo — usuários reais têm mundos com acentos e nomes com espaço.
+     */
+    @Test
+    void testAcceptsLegitimateWorldNames() throws IOException {
+        // O world não precisa existir — o BackupService retorna early nesse caso.
+        // O importante é que a validação NÃO rejeite esses nomes.
+        backupService.createSnapshot("Mundo 1-SMP_v2.0", gameDir, backupBaseDir);
+        backupService.createSnapshot("MundoAcentoáéíó", gameDir, backupBaseDir);
+        backupService.createSnapshot("世界", gameDir, backupBaseDir);
+        backupService.createSnapshot("Skyblock-v1.2.3", gameDir, backupBaseDir);
+    }
+
+    /**
      * A sobrecarga (File, File) deve ser no-op silencioso se o dir não existir
      * (preserva o comportamento original do BackupService).
      */
