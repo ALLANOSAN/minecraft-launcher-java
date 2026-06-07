@@ -1,7 +1,5 @@
 package com.minelauncher.ui.services;
 
-import com.minelauncher.utils.FileUtils;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

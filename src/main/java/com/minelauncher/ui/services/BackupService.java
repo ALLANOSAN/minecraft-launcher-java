@@ -17,9 +17,13 @@ public class BackupService {
     /**
      * Cria um snapshot de um mundo específico.
      *
-     * BUG-6: assinatura ajustada para receber o nome do mundo e o gameDir
-     * (em vez do worldDir raiz), evitando ambiguidade sobre qual mundo copiar
-     * e impedindo o backup acidental do gameDir inteiro.
+     * <p><b>HIGH-9 do code-review:</b> a checagem de symlinks + Zip Slip
+     * defesa em profundidade é feita dentro de
+     * {@link com.minelauncher.utils.FileUtils#copyDirectory(File, File)}.
+     * Se um modpack malicioso contiver um symlink
+     * {@code config/some_file -> /etc/passwd}, o copyDirectory pula
+     * o link (logando warning). BackupService herda essa proteção
+     * automaticamente.
      *
      * @param worldName      nome da pasta do mundo (dentro de gameDir/saves/)
      * @param gameDir        diretório-raiz do perfil (.minecraft ou custom)

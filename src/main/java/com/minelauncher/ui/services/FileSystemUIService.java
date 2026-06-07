@@ -1,8 +1,6 @@
 package com.minelauncher.ui.services;
 
 import com.minelauncher.models.LaunchProfile;
-import com.minelauncher.profiles.ProfileManager;
-import com.minelauncher.settings.SettingsManager;
 import java.io.File;
 import java.awt.Desktop;
 

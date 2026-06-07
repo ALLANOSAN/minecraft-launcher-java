@@ -76,7 +76,6 @@ public class DownloadManager {
             }
 
             long totalBytes = response.body().contentLength();
-            long downloadedBytes = 0;
 
             try (InputStream is = response.body().byteStream()) {
                 writeToFile(is, dest, written -> {

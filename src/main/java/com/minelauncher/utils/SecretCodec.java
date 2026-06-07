@@ -4,8 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -107,7 +105,17 @@ public final class SecretCodec {
 
     /**
      * Cifra uma string. Retorna Base64 do IV||ciphertext. Retorna null se input for null.
-     * Se o algoritmo falhar, loga e retorna a string original (degradação graceful).
+     *
+     * <p><b>FAIL CLOSED (CRIT-1 do code-review):</b> se o algoritmo JCE/AES
+     * falhar, lançamos {@link IllegalStateException} em vez de gravar plain
+     * text no disco. A degradação silenciosa para plain text permitia que
+     * {@code launcher_accounts.json} terminasse com um mix de linhas
+     * {@code enc:...} e linhas cleartext — o pior cenário, porque o
+     * {@link #decrypt(String)} continuaria funcionando mas o arquivo
+     * estaria exposto a qualquer um que lesse o disco.
+     *
+     * <p>Antes a degradação era "graceful"; agora o caller (SettingsManager)
+     * deve abortar o save e reportar o erro ao usuário.
      */
     public static String encrypt(String plain) {
         if (plain == null) return null;
@@ -125,8 +133,11 @@ public final class SecretCodec {
             System.arraycopy(cipherText, 0, combined, iv.length, cipherText.length);
             return java.util.Base64.getEncoder().encodeToString(combined);
         } catch (Exception e) {
-            LOG.warn("Falha ao cifrar token (degradando para plain text)", e);
-            return plain;
+            // Fail closed: NUNCA retornar plain text. O save() em
+            // SettingsManager deve propagar e abortar a escrita.
+            LOG.error("Falha CRÍTICA ao cifrar token — abortando (fail closed)", e);
+            throw new IllegalStateException(
+                    "Falha na cifragem de token; armazenamento de credenciais desativado", e);
         }
     }
 

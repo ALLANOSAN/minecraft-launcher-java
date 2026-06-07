@@ -6,7 +6,6 @@ import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -28,7 +27,11 @@ public class NetMonitor {
     /** HEAD na manifest URL da Mojang — leve, cacheado pelo CDN. */
     private static final String PROBE_URL =
             "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
-    private static final long TIMEOUT_SECONDS = 3;
+    // FIX cleanup: TIMEOUT_SECONDS removido — era leftover do refactor
+    // "use HttpClient singleton" (FIX H-5). O probe agora herda o
+    // timeout do HttpClient global. Se um timeout curto for
+    // necessário no futuro, construir OkHttpClient.callTimeout()
+    // local em vez de campo órfão.
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile boolean online = true;

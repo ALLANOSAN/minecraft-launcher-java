@@ -3,7 +3,6 @@ package com.minelauncher.ui.services;
 import com.minelauncher.ui.utils.JavaFxUtils;
 import javafx.application.Platform;
 import javafx.scene.control.Label;
-import java.util.Map;
 
 /**
  * Service para gerenciar a máquina de estados do Launcher na UI.

@@ -5,14 +5,17 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.minelauncher.models.GameProfile;
+import com.minelauncher.utils.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -35,6 +38,16 @@ public class MicrosoftAuth {
                 .build();
     }
 
+    /**
+     * Lançada quando o refresh token foi revogado, expirou completamente
+     * (>1 ano sem uso), ou a chamada de refresh retornou erro. Indica
+     * que o usuário precisa refazer o login Microsoft. CRIT-3.
+     */
+    public static class RefreshTokenExpiredException extends RuntimeException {
+        public RefreshTokenExpiredException(String message) { super(message); }
+        public RefreshTokenExpiredException(String message, Throwable cause) { super(message, cause); }
+    }
+
     public record DeviceCodeResponse(
             String user_code,
             String verification_uri,
@@ -55,48 +68,110 @@ public class MicrosoftAuth {
                 onCodeReceived.accept(dcr);
 
                 // 2. Polling para obter o MS Token
-                String msAccessToken = pollForMicrosoftToken(dcr);
+                TokenResponse msTokens = pollForMicrosoftToken(dcr);
 
                 // 3. Autenticar no Xbox Live (XBL)
-                JsonObject xblResponse = authenticateXBL(msAccessToken);
-                String xblToken = getStringOrThrow(xblResponse, "Token", "XBL");
+                JsonObject xblResponse = authenticateXBL(msTokens.accessToken);
+                String xblToken = JsonUtils.getStringOrThrow(xblResponse, "Token", "XBL");
                 String xblUserHash = extractUhsFromXbl(xblResponse);
 
                 // 4. Autenticar no XSTS
                 JsonObject xstsResponse = authenticateXSTS(xblToken);
-                String xstsToken = getStringOrThrow(xstsResponse, "Token", "XSTS");
+                String xstsToken = JsonUtils.getStringOrThrow(xstsResponse, "Token", "XSTS");
 
                 // 5. Obter Minecraft Access Token
                 String mcAccessToken = getMinecraftToken(xblUserHash, xstsToken);
 
                 // 6. Buscar Perfil Minecraft
                 JsonObject profile = getMinecraftProfile(mcAccessToken);
-                String name = getStringOrThrow(profile, "name", "MinecraftProfile");
-                String id = getStringOrThrow(profile, "id", "MinecraftProfile");
+                String name = JsonUtils.getStringOrThrow(profile, "name", "MinecraftProfile");
+                String id = JsonUtils.getStringOrThrow(profile, "id", "MinecraftProfile");
                 UUID uuid = UUID.fromString(id.replaceFirst(
                         "(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5"));
 
                 // BUG-1: isMicrosoft = true para contas autenticadas via Microsoft.
-                // O construtor define isOffline = !isMicrosoft, então era crucial corrigir isso.
                 GameProfile gameProfile = new GameProfile(name, uuid, true);
                 gameProfile.setAccessToken(mcAccessToken);
+                // CRIT-3 do code-review: persistir refresh token + expiry para
+                // evitar re-login diário (Mojang access tokens expiram em ~24h).
+                gameProfile.setRefreshToken(msTokens.refreshToken);
+                gameProfile.setTokenExpiry(System.currentTimeMillis() + msTokens.expiresInMs);
 
-                LOG.info("Login Microsoft concluído: {}", name);
+                LOG.info("Login Microsoft concluído: {} (token expira em {}min)",
+                        name, msTokens.expiresInMs / 60000);
                 return gameProfile;
 
             } catch (InterruptedException e) {
-                // Restaura flag de interrupção e propaga como exceção checked-friendly
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("Login Microsoft interrompido", e);
             } catch (Exception e) {
-                // FIX C-6: preserva stack trace original via 'cause' (antes era
-                // 'throw new RuntimeException(e.getMessage())' que perdia a stack)
                 LOG.error("Falha no login Microsoft", e);
                 throw new RuntimeException(
                         e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(), e);
             }
         });
     }
+
+    /**
+     * CRIT-3: renova o access token do Minecraft usando o refresh token salvo.
+     * Chamado antes de lançar o jogo se {@link GameProfile#isTokenExpired()} for
+     * true. Atualiza o profile in-place com os novos tokens.
+     *
+     * @param profile profile existente (precisa ter refresh token)
+     * @return profile atualizado
+     * @throws IOException se o refresh falhar (token revogado, expirado, etc.)
+     */
+    public GameProfile refreshTokens(GameProfile profile) throws IOException, InterruptedException {
+        if (profile == null || profile.getRefreshToken() == null || profile.getRefreshToken().isEmpty()) {
+            throw new IOException("Profile sem refresh token — re-login necessário");
+        }
+
+        String body = "grant_type=refresh_token" +
+                "&client_id=" + CLIENT_ID +
+                "&refresh_token=" + URLEncoder.encode(profile.getRefreshToken(), StandardCharsets.UTF_8);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://login.microsoftonline.com/consumers/oauth2/v2.0/token"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        JsonObject json;
+        try {
+            json = JsonParser.parseString(response.body()).getAsJsonObject();
+        } catch (Exception parseErr) {
+            throw new IOException("Resposta inválida do token endpoint no refresh: " + response.body(), parseErr);
+        }
+
+        if (response.statusCode() != 200) {
+            // Preserva error_description para diagnóstico
+            String error = JsonUtils.getStringOrNull(json, "error");
+            String desc = JsonUtils.getStringOrNull(json, "error_description");
+            throw new IOException("Refresh token falhou (HTTP " + response.statusCode() + "): "
+                    + (error != null ? error : "?")
+                    + (desc != null ? " — " + desc : ""));
+        }
+
+        String newAccess = JsonUtils.getStringOrThrow(json, "access_token", "RefreshToken");
+        String newRefresh = JsonUtils.getStringOrNull(json, "refresh_token");
+        long expiresIn = JsonUtils.getIntOrDefault(json, "expires_in", 86400);
+
+        profile.setAccessToken(newAccess);
+        if (newRefresh != null) {
+            // Microsoft rotaciona o refresh token; sempre usar o novo se vier
+            profile.setRefreshToken(newRefresh);
+        }
+        profile.setTokenExpiry(System.currentTimeMillis() + expiresIn * 1000L);
+        LOG.info("Access token renovado para {} (expira em {}s)", profile.getName(), expiresIn);
+        return profile;
+    }
+
+    /**
+     * Encapsula o trio access_token/refresh_token/expires_in do endpoint /token.
+     * Só usado durante o fluxo inicial de login.
+     */
+    private record TokenResponse(String accessToken, String refreshToken, long expiresInMs) {}
 
     private DeviceCodeResponse requestDeviceCode() throws IOException, InterruptedException {
         String body = "client_id=" + CLIENT_ID + "&scope=" + SCOPE;
@@ -114,23 +189,21 @@ public class MicrosoftAuth {
 
         JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
         return new DeviceCodeResponse(
-                getStringOrThrow(json, "user_code", "DeviceCode"),
-                getStringOrThrow(json, "verification_uri", "DeviceCode"),
-                getStringOrThrow(json, "device_code", "DeviceCode"),
-                getIntOrDefault(json, "interval", 5),
-                getIntOrDefault(json, "expires_in", 900)
+                JsonUtils.getStringOrThrow(json, "user_code", "DeviceCode"),
+                JsonUtils.getStringOrThrow(json, "verification_uri", "DeviceCode"),
+                JsonUtils.getStringOrThrow(json, "device_code", "DeviceCode"),
+                JsonUtils.getIntOrDefault(json, "interval", 5),
+                JsonUtils.getIntOrDefault(json, "expires_in", 900)
         );
     }
 
-    private String pollForMicrosoftToken(DeviceCodeResponse dcr) throws IOException, InterruptedException {
+    private TokenResponse pollForMicrosoftToken(DeviceCodeResponse dcr) throws IOException, InterruptedException {
         String body = "grant_type=urn:ietf:params:oauth:grant-type:device_code" +
                 "&client_id=" + CLIENT_ID +
                 "&device_code=" + dcr.device_code();
 
         long start = System.currentTimeMillis();
         long expiry = start + (dcr.expires_in() * 1000L);
-
-        // FIX C-5: tracking de interval adaptativo (slow_down aumenta, authorization_pending mantém)
         int currentInterval = dcr.interval();
 
         while (System.currentTimeMillis() < expiry) {
@@ -149,19 +222,20 @@ public class MicrosoftAuth {
             }
 
             if (response.statusCode() == 200) {
-                return getStringOrThrow(json, "access_token", "TokenResponse");
+                String access = JsonUtils.getStringOrThrow(json, "access_token", "TokenResponse");
+                String refresh = JsonUtils.getStringOrNull(json, "refresh_token");
+                long expiresIn = JsonUtils.getIntOrDefault(json, "expires_in", 86400);
+                return new TokenResponse(access, refresh, expiresIn * 1000L);
             }
 
-            String error = json.has("error") && !json.get("error").isJsonNull()
-                    ? json.get("error").getAsString() : "";
+            String error = JsonUtils.getStringOrNull(json, "error");
+            // Preserva error_description para diagnóstico (antes era perdido)
+            String errorDesc = JsonUtils.getStringOrNull(json, "error_description");
 
-            switch (error) {
+            switch (error != null ? error : "") {
                 case "authorization_pending":
-                    // Estado normal: usuário ainda não autorizou. Aguarda e tenta de novo.
                     break;
                 case "slow_down":
-                    // FIX C-5: Microsoft pediu pra esperar mais. Aumenta interval em 5s.
-                    // Antes o código abortava o login nesse erro.
                     currentInterval += 5;
                     LOG.debug("Microsoft solicitou slow_down; novo interval={}s", currentInterval);
                     break;
@@ -172,7 +246,8 @@ public class MicrosoftAuth {
                 case "":
                     throw new IOException("Resposta sem campo 'error' (HTTP " + response.statusCode() + "): " + response.body());
                 default:
-                    throw new IOException("Erro no polling Microsoft: " + error);
+                    throw new IOException("Erro no polling Microsoft: " + error
+                            + (errorDesc != null ? " — " + errorDesc : ""));
             }
 
             Thread.sleep(currentInterval * 1000L);
@@ -205,10 +280,6 @@ public class MicrosoftAuth {
         return JsonParser.parseString(response.body()).getAsJsonObject();
     }
 
-    /**
-     * FIX C-4 (parte 1): extrai uhs com null check defensivo.
-     * Antes: chain de .get(0).getAsJsonObject().get("uhs").getAsString() sem validação.
-     */
     private String extractUhsFromXbl(JsonObject xblResponse) {
         JsonObject displayClaims = xblResponse.getAsJsonObject("DisplayClaims");
         if (displayClaims == null) {
@@ -272,7 +343,7 @@ public class MicrosoftAuth {
             throw new IOException("Erro Minecraft Login (HTTP " + response.statusCode() + "): " + response.body());
         }
         JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-        return getStringOrThrow(json, "access_token", "MinecraftToken");
+        return JsonUtils.getStringOrThrow(json, "access_token", "MinecraftToken");
     }
 
     private JsonObject getMinecraftProfile(String mcAccessToken) throws IOException, InterruptedException {
@@ -287,28 +358,5 @@ public class MicrosoftAuth {
             throw new IOException("Erro Perfil Minecraft (HTTP " + response.statusCode() + "): " + response.body());
         }
         return JsonParser.parseString(response.body()).getAsJsonObject();
-    }
-
-    // =============== Helpers JSON defensivos (FIX C-4 parte 2) ===============
-
-    private static String getStringOrThrow(JsonObject obj, String field, String context) {
-        if (obj == null) {
-            throw new IllegalStateException(context + ": resposta JSON nula");
-        }
-        JsonElement el = obj.get(field);
-        if (el == null || el.isJsonNull()) {
-            throw new IllegalStateException(context + ": campo '" + field + "' ausente");
-        }
-        if (!el.isJsonPrimitive()) {
-            throw new IllegalStateException(context + ": campo '" + field + "' não é primitivo");
-        }
-        return el.getAsString();
-    }
-
-    private static int getIntOrDefault(JsonObject obj, String field, int defaultValue) {
-        if (obj == null) return defaultValue;
-        JsonElement el = obj.get(field);
-        if (el == null || el.isJsonNull() || !el.isJsonPrimitive()) return defaultValue;
-        try { return el.getAsInt(); } catch (Exception e) { return defaultValue; }
     }
 }

@@ -643,12 +643,13 @@ public class ModActions {
         }
     }
 
+    /**
+     * CRIT-7: delega para {@link com.minelauncher.utils.FileUtils#sanitizeName(String)}.
+     * Antes removia tudo não-ASCII, colapsando nomes com CJK/acentos para
+     * string vazia, o que tentava gravar em diretórios errados.
+     */
     public static String sanitizeName(String name) {
-        String sanitized = name.replaceAll("[^a-zA-Z0-9\\s\\-]", "").replaceAll("\\s+", "_").trim();
-        if (sanitized.isEmpty()) {
-            sanitized = "modpack_" + Math.abs(name.hashCode());
-        }
-        return sanitized;
+        return com.minelauncher.utils.FileUtils.sanitizeName(name);
     }
 
     /**

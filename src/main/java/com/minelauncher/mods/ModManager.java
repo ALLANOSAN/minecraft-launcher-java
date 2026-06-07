@@ -77,19 +77,29 @@ public class ModManager {
         List<ModInfo> cached = getCached(cacheKey, List.class);
         if (cached != null) return cached;
 
+        // HIGH-13: constrói facets como JSON real via Gson, em vez de
+        // concatenar strings e torcer pra URL encoding dar certo. Antes
+        // uma query com aspas/backslash produzia facets malformados e a
+        // busca silenciosamente retornava zero resultados.
         String encodedQuery = java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8);
         String url = getModrinthApiUrl() + "/search?query=" + encodedQuery +
                 "&limit=" + limit;
-        List<String> facetParts = new ArrayList<>();
+        JsonArray inner = new JsonArray();
         if (gameVersion != null && !gameVersion.isEmpty()) {
-            facetParts.add("\"versions:" + gameVersion + "\"");
+            JsonObject f = new JsonObject();
+            f.addProperty("versions", gameVersion);
+            inner.add(f);
         }
         if (projectType != null && !projectType.isEmpty()) {
-            facetParts.add("\"project_type:" + projectType + "\"");
+            JsonObject f = new JsonObject();
+            f.addProperty("project_type", projectType);
+            inner.add(f);
         }
-        if (!facetParts.isEmpty()) {
-            String encodedFacets = java.net.URLEncoder.encode("[[" + String.join(",", facetParts) + "]]", java.nio.charset.StandardCharsets.UTF_8);
-            url += "&facets=" + encodedFacets;
+        if (inner.size() > 0) {
+            JsonArray outer = new JsonArray();
+            outer.add(inner);
+            String facetsJson = com.minelauncher.utils.JsonUtils.GSON.toJson(outer);
+            url += "&facets=" + java.net.URLEncoder.encode(facetsJson, java.nio.charset.StandardCharsets.UTF_8);
         }
 
         Request request = new Request.Builder()
@@ -157,20 +167,27 @@ public class ModManager {
         List<ModInfo> cached = getCached(cacheKey, List.class);
         if (cached != null) return cached;
 
-        String url = getCurseForgeProxyUrl() + "/mods/search?gameId=" + gameId +
-                "&classId=" + classId +
-                "&searchFilter=" + query;
-        if (gameVersion != null && !gameVersion.isEmpty()) {
-            url += "&gameVersion=" + gameVersion;
-        }
-        url +=
-                "&pageSize=" + limit +
-                "&sortField=Popularity&sortOrder=desc";
+        // HIGH-8: usa HttpUrl.Builder para encoding correto. Antes
+        // query/gameVersion eram concatenados crus — qualquer '&', '?',
+        // '=', ' ' ou não-ASCII quebrava a URL silenciosamente.
+        okhttp3.HttpUrl.Builder urlBuilder = new okhttp3.HttpUrl.Builder()
+                .scheme("https")
+                .host(java.net.URI.create(getCurseForgeProxyUrl()).getHost())
+                .addPathSegments(java.net.URI.create(getCurseForgeProxyUrl()).getPath().replaceFirst("^/", ""))
+                .addPathSegment("mods")
+                .addPathSegment("search")
+                .addQueryParameter("gameId", String.valueOf(gameId))
+                .addQueryParameter("classId", String.valueOf(classId))
+                .addQueryParameter("searchFilter", query == null ? "" : query)
+                .addQueryParameter("gameVersion", gameVersion == null ? "" : gameVersion)
+                .addQueryParameter("pageSize", String.valueOf(limit))
+                .addQueryParameter("sortField", "Popularity")
+                .addQueryParameter("sortOrder", "desc");
+        String url = urlBuilder.build().toString();
 
         LOG.info("Tentando requisição para CurseForge: {}", url);
         Request request = new Request.Builder()
                 .url(url)
-                .header("User-Agent", "MineLauncher/1.0")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -609,46 +626,114 @@ public class ModManager {
      * @param modpackDir diretório do modpack
      * @return lista de descrições de mods com atualização disponível
      */
+    /**
+     * CRIT-6 do code-review: paraleliza com Semaphore(4) e adiciona
+     * backoff em 429. Antes era 1 chamada sequencial por mod — modpack
+     * com 200 mods levava 2-5 min e estourava o rate limit do CurseForge
+     * (HTTP 429).
+     */
     public List<String> checkModUpdates(File modpackDir) {
         List<String> updates = new ArrayList<>();
         File manifest = new File(modpackDir, "manifest.json");
         if (!manifest.exists()) return updates;
 
+        JsonArray modFiles;
         try {
             String manifestJson = java.nio.file.Files.readString(manifest.toPath());
             JsonObject manifestObj = JsonParser.parseString(manifestJson).getAsJsonObject();
-            JsonArray modFiles = manifestObj.getAsJsonArray("files");
-            if (modFiles == null) return updates;
+            modFiles = manifestObj.getAsJsonArray("files");
+        } catch (Exception e) {
+            LOG.warn("Erro ao ler manifest.json: {}", e.getMessage());
+            return updates;
+        }
+        if (modFiles == null) return updates;
 
-            for (JsonElement el : modFiles) {
-                JsonObject modEntry = el.getAsJsonObject();
+        // Coleta tasks (limitada a 50 para evitar bans acumulados)
+        int limit = Math.min(modFiles.size(), 50);
+        List<int[]> tasks = new ArrayList<>();
+        for (int i = 0; i < limit; i++) {
+            try {
+                JsonObject modEntry = modFiles.get(i).getAsJsonObject();
                 int projectID = modEntry.get("projectID").getAsInt();
                 int fileID = modEntry.get("fileID").getAsInt();
-
-                try {
-                    // Buscar arquivo mais recente do mod
-                    JsonArray files = getCurseForgeFiles(projectID, "");
-                    if (files.size() > 0) {
-                        int latestFileID = files.get(0).getAsJsonObject().get("id").getAsInt();
-                        if (latestFileID != fileID) {
-                            String modName = files.get(0).getAsJsonObject()
-                                    .has("displayName") ? files.get(0).getAsJsonObject().get("displayName").getAsString()
-                                    : "Mod #" + projectID;
-                            updates.add(modName + " (atual: " + fileID + ", novo: " + latestFileID + ")");
-                        }
-                    }
-                } catch (Exception e) {
-                    LOG.debug("Erro ao verificar atualização do mod {}: {}", projectID, e.getMessage());
-                }
-
-                // Limitar a 50 verificações para não sobrecarregar a API
-                if (updates.size() >= 50) break;
+                tasks.add(new int[]{projectID, fileID});
+            } catch (Exception e) {
+                LOG.debug("Entrada inválida no manifest em [{}]: {}", i, e.getMessage());
             }
-        } catch (Exception e) {
-            LOG.warn("Erro ao verificar atualizações: {}", e.getMessage());
         }
 
+        List<String> taskUpdates = java.util.Collections.synchronizedList(new ArrayList<>());
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+        java.util.concurrent.Semaphore sem = new java.util.concurrent.Semaphore(4);
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(tasks.size());
+
+        for (int[] t : tasks) {
+            pool.submit(() -> {
+                try {
+                    sem.acquire();
+                    try {
+                        String result = checkSingleModUpdate(t[0], t[1]);
+                        if (result != null) taskUpdates.add(result);
+                    } finally {
+                        sem.release();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        try {
+            latch.await(5, java.util.concurrent.TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("Verificação de atualizações interrompida");
+        } finally {
+            pool.shutdownNow();
+        }
+        updates.addAll(taskUpdates);
         return updates;
+    }
+
+    /**
+     * Verifica um único mod com retry em 429. Extraído para
+     * compartilhamento entre o loop sequencial legado e a versão
+     * paralela.
+     */
+    private String checkSingleModUpdate(int projectID, int fileID) {
+        int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                JsonArray files = getCurseForgeFiles(projectID, "");
+                if (files.size() > 0) {
+                    int latestFileID = files.get(0).getAsJsonObject().get("id").getAsInt();
+                    if (latestFileID != fileID) {
+                        String modName = files.get(0).getAsJsonObject()
+                                .has("displayName") ? files.get(0).getAsJsonObject().get("displayName").getAsString()
+                                : "Mod #" + projectID;
+                        return modName + " (atual: " + fileID + ", novo: " + latestFileID + ")";
+                    }
+                }
+                return null;
+            } catch (Exception e) {
+                String msg = e.getMessage() == null ? "" : e.getMessage();
+                if (msg.contains("429") && attempt < maxAttempts) {
+                    try {
+                        // 429 backoff: 1s, 2s, 4s
+                        Thread.sleep((long) Math.pow(2, attempt - 1) * 1000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                } else {
+                    LOG.debug("Erro ao verificar mod {}: {}", projectID, msg);
+                    return null;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -940,7 +1025,13 @@ public class ModManager {
         com.minelauncher.utils.FileUtils.deleteDirectory(dir);
     }
 
+    /**
+     * CRIT-7: delega para {@link com.minelauncher.utils.FileUtils#sanitizeName(String)}
+     * para garantir comportamento idêntico em todos os call sites. A versão
+     * antiga removia tudo não-ASCII e colapsava para string vazia em
+     * modpacks com nomes CJK/acentos.
+     */
     private String sanitizeName(String name) {
-        return name.replaceAll("[^a-zA-Z0-9\\s\\-]", "").replaceAll("\\s+", "_");
+        return com.minelauncher.utils.FileUtils.sanitizeName(name);
     }
 }

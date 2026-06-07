@@ -1,11 +1,13 @@
 package com.minelauncher.ui.services;
 
+import com.minelauncher.auth.MicrosoftAuth;
 import com.minelauncher.launcher.GameLauncher;
 import com.minelauncher.launcher.VersionManager;
 import com.minelauncher.models.GameProfile;
 import com.minelauncher.models.LaunchProfile;
 import com.minelauncher.settings.SettingsManager;
 import java.io.File;
+import java.io.IOException;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -18,12 +20,37 @@ public class GameLaunchService {
     private final VersionManager versionManager;
     private final GameLauncher gameLauncher;
     private final BackupService backupService;
+    private final AuthService authService;
 
     @com.google.inject.Inject
-    public GameLaunchService(VersionManager versionManager, GameLauncher gameLauncher, BackupService backupService) {
+    public GameLaunchService(VersionManager versionManager, GameLauncher gameLauncher,
+                             BackupService backupService, AuthService authService) {
         this.versionManager = versionManager;
         this.gameLauncher = gameLauncher;
         this.backupService = backupService;
+        this.authService = authService;
+    }
+
+    /**
+     * Exceções tipadas para diagnóstico preciso no caller (UI pode
+     * mostrar mensagens específicas em vez de "Erro genérico").
+     * <b>MEDIUM do code-review:</b> antes qualquer falha no fluxo
+     * de launch virava {@code Exception} genérica via catch-all,
+     * indistinguível de "Java não instalado" vs "conta bloqueada"
+     * vs "JSON malformado". UI mostrava "Erro: null" para vários
+     * casos.
+     */
+    public static class VersionNotInstalledException extends RuntimeException {
+        public VersionNotInstalledException(String message) { super(message); }
+    }
+    public static class ModLoaderInstallException extends RuntimeException {
+        public ModLoaderInstallException(String message, Throwable cause) { super(message, cause); }
+    }
+    public static class AuthenticationExpiredException extends RuntimeException {
+        public AuthenticationExpiredException(String message) { super(message); }
+    }
+    public static class JavaNotFoundException extends RuntimeException {
+        public JavaNotFoundException(String message) { super(message); }
     }
 
     public void launch(LaunchProfile profile, GameProfile account,
@@ -48,10 +75,26 @@ public class GameLaunchService {
                     backupService.createSnapshot(worldDir, backupDir);
                 }
 
+                // 0.5. CRIT-3: renovar access token se expirado.
+                // Variável final-effectively: não posso reatribuir `account`
+                // se for referenciada em lambda posterior.
+                final GameProfile finalAccount;
+                try {
+                    finalAccount = authService.refreshIfNeeded(account);
+                } catch (MicrosoftAuth.RefreshTokenExpiredException ex) {
+                    throw new AuthenticationExpiredException(
+                            "Sessão Microsoft expirou. Faça login novamente. Detalhe: " + ex.getMessage());
+                }
+
                 // 1. Baixar versão vanilla se necessário
                 if (!versionManager.getInstalledVersions().contains(profile.getGameVersion())) {
                     statusUpdater.accept("Baixando Minecraft " + profile.getGameVersion() + "...");
-                    versionManager.downloadVersion(profile.getGameVersion(), progressUpdater);
+                    try {
+                        versionManager.downloadVersion(profile.getGameVersion(), progressUpdater);
+                    } catch (IOException e) {
+                        throw new VersionNotInstalledException(
+                                "Não foi possível baixar Minecraft " + profile.getGameVersion() + ": " + e.getMessage());
+                    }
                 }
 
                 // 2. Instalar mod loader se necessário
@@ -61,16 +104,21 @@ public class GameLaunchService {
                     String versionId = gameLauncher.resolveVersionId(profile);
                     if (!versionManager.getInstalledVersions().contains(versionId)) {
                         statusUpdater.accept("Instalando " + loader + " " + loaderVersion + "...");
-                        switch (loader) {
-                            case "forge" -> versionManager.installForge(profile.getGameVersion(), loaderVersion, (m, p) -> statusUpdater.accept("Forge: " + m));
-                            case "fabric" -> versionManager.installFabric(profile.getGameVersion(), (m, p) -> statusUpdater.accept("Fabric: " + m));
-                            case "neoforge" -> versionManager.installNeoForge(profile.getGameVersion(), loaderVersion, (m, p) -> statusUpdater.accept("NeoForge: " + m));
-                            case "quilt" -> versionManager.installQuilt(profile.getGameVersion(), (m, p) -> statusUpdater.accept("Quilt: " + m));
+                        try {
+                            switch (loader) {
+                                case "forge" -> versionManager.installForge(profile.getGameVersion(), loaderVersion, (m, p) -> statusUpdater.accept("Forge: " + m));
+                                case "fabric" -> versionManager.installFabric(profile.getGameVersion(), (m, p) -> statusUpdater.accept("Fabric: " + m));
+                                case "neoforge" -> versionManager.installNeoForge(profile.getGameVersion(), loaderVersion, (m, p) -> statusUpdater.accept("NeoForge: " + m));
+                                case "quilt" -> versionManager.installQuilt(profile.getGameVersion(), (m, p) -> statusUpdater.accept("Quilt: " + m));
+                            }
+                        } catch (Exception e) {
+                            throw new ModLoaderInstallException(
+                                    "Falha ao instalar " + loader + " " + loaderVersion, e);
                         }
                     }
                 }
 
-                gameLauncher.launch(profile, account, logUpdater);
+                gameLauncher.launch(profile, finalAccount, logUpdater);
                 onStarted.run();
 
                 // Aguardar fim do jogo

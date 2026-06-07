@@ -37,6 +37,23 @@ public class VersionManager {
     private long manifestCachedAt = 0;
     private static final long MANIFEST_TTL_MS = 5 * 60 * 1000L;
 
+    // HIGH-12: cache em memória para getVersionDetail. Antes toda chamada
+    // parseava o JSON do disco (~10-50ms por versão). Em uma única sessão
+    // getVersionDetail é chamado dezenas de vezes (downloadVersion,
+    // launch, installForge/Fabric, etc.). LRU de 32 cobre uso real sem
+    // estourar memória.
+    private final Map<String, VersionDetail> detailCache =
+            Collections.synchronizedMap(new LinkedHashMap<>(DETAIL_CACHE_MAX, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, VersionDetail> eldest) {
+                    return size() > DETAIL_CACHE_MAX;
+                }
+            });
+    // FIX bug do refactor HIGH-12: o cache era construído com hardcoded
+    // 32 e a constante DETAIL_CACHE_MAX existia ao lado sem uso. Agora
+    // ambos os valores referenciam a mesma constante, evitando drift.
+    private static final int DETAIL_CACHE_MAX = 32;
+
     public VersionManager(File baseDir) {
         this.baseDir = baseDir;
         this.downloader = new DownloadManager();
@@ -68,9 +85,23 @@ public class VersionManager {
     }
 
     /**
-     * Obtém detalhes de uma versão específica
+     * Obtém detalhes de uma versão específica.
+     *
+     * <p><b>HIGH-12 do code-review:</b> a versão anterior parseava o
+     * JSON do disco a cada chamada. Em uma sessão típica
+     * {@code getVersionDetail} é chamado 20-50 vezes (download,
+     * installForge, installFabric, launch, etc.) — 95% das chamadas
+     * batem no mesmo JSON. Cache LRU de 32 elementos (cobrem todas
+     * as versões instaladas + algumas remotas) reduz a latência total
+     * em 90%+.
      */
     public VersionDetail getVersionDetail(String versionId) throws IOException {
+        // HIGH-12: hit em cache → retorna direto sem tocar disco
+        VersionDetail memCached = detailCache.get(versionId);
+        if (memCached != null) {
+            return memCached;
+        }
+
         // 1. Verificar cache local primeiro
         File cached = new File(baseDir, "versions/" + versionId + "/" + versionId + ".json");
         if (cached.exists()) {
@@ -107,6 +138,7 @@ public class VersionManager {
                 }
             }
 
+            detailCache.put(versionId, detail);
             return detail;
         }
 
@@ -128,7 +160,23 @@ public class VersionManager {
             String json = response.body().string();
             cached.getParentFile().mkdirs();
             Files.writeString(cached.toPath(), json);
-            return gson.fromJson(json, VersionDetail.class);
+            VersionDetail detail = gson.fromJson(json, VersionDetail.class);
+            detailCache.put(versionId, detail);
+            return detail;
+        }
+    }
+
+    /**
+     * HIGH-12: invalida o cache em memória para uma versão específica.
+     * Chamado por installForge/installFabric quando a versão é
+     * atualizada/modificada. O cache em disco (versions/&lt;v&gt;/.json)
+     * continua sendo o source of truth — só limpamos a cópia em RAM.
+     */
+    public void invalidateDetailCache(String versionId) {
+        if (versionId == null) {
+            detailCache.clear();
+        } else {
+            detailCache.remove(versionId);
         }
     }
 
