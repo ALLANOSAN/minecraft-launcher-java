@@ -25,11 +25,10 @@ jobs:
       - name: Verify build
         run: mvn -B -q clean compile
 
-      - name: Run tests (if any)
+      - name: Run tests
         run: mvn -B -q test
-        continue-on-error: true
-        # Sem testes ainda — não bloqueia PR. Quando JUnit for adicionado,
-        # troque continue-on-error por obrigatório.
+        # 159 testes JUnit 5 (159/159 verde local). Falha aqui bloqueia PR.
+        # Adicionado após a refactor + 2 code reviews + security review.
 
       - name: Package
         run: mvn -B -q -DskipTests package
