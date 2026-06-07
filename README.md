@@ -1,5 +1,10 @@
 # MineLauncher 🚀
 
+[![Java CI](https://github.com/ALLANOSAN/minecraft-launcher-java/actions/workflows/ci.yml/badge.svg)](https://github.com/ALLANOSAN/minecraft-launcher-java/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/ALLANOSAN/minecraft-launcher-java?include_prereleases&sort=semver)](https://github.com/ALLANOSAN/minecraft-launcher-java/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Java 21+](https://img.shields.io/badge/Java-21%2B-blue)](https://openjdk.org/projects/jdk/21/)
+
 Um launcher de Minecraft moderno, construído com **Java 21+**, **JavaFX** e **Maven**. Projetado para ser rápido, bonito e funcional em Windows, Linux e macOS.
 
 ## ✨ Funcionalidades
