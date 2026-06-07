@@ -52,6 +52,12 @@ public class NativesExtractor {
      *                  usado em {@code versions/<id>/natives/})
      */
     public String getNativesDir(VersionDetail detail, String versionId) {
+        // MEDIUM do code-review: defesa em profundidade contra path
+        // traversal via versionId. GameLauncher.launch() já valida, mas
+        // esta classe é pública no package e pode ser chamada de outros
+        // pontos no futuro.
+        GameLauncher.assertSafeVersionId(versionId);
+
         File nativesDir = new File(baseDir, "versions/" + versionId + "/natives");
         nativesDir.mkdirs();
 
@@ -97,6 +103,15 @@ public class NativesExtractor {
                     String name = entry.getName().replace('\\', '/');
                     if (name.endsWith(".so") || name.endsWith(".dll") || name.endsWith(".dylib")
                             || name.endsWith(".jnilib")) {
+                        // LOW-10 (code-review): aqui o Zip Slip é defense
+                        // in depth — `fileName = new File(name).getName()`
+                        // já garante que fileName não tem separadores
+                        // (basename do entry do zip). A verificação de
+                        // canônico é redundante, mas mantida como
+                        // cinto-e-suspensórios: se algum dia o filtro
+                        // mudar (ex: aceitar subpastas "linux/x64/") e
+                        // o basename não for mais seguro, o canônico
+                        // ainda aborta.
                         String fileName = new File(name).getName();
                         File dest = new File(nativesDir, fileName);
                         String canonicalDest = dest.getCanonicalPath();

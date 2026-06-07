@@ -16,6 +16,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Orquestra o lançamento do Minecraft.
@@ -46,6 +48,15 @@ import java.util.function.Consumer;
 public class GameLauncher {
 
     private static final Logger LOG = LoggerFactory.getLogger(GameLauncher.class);
+
+    /** Default Java major version when the version manifest doesn't specify one. */
+    private static final int DEFAULT_JAVA_VERSION = 21;
+
+    /**
+     * Pattern matching {@code ${placeholder}} tokens. Compiled once and
+     * reused by {@link #replacePlaceholders}.
+     */
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)\\}");
 
     private final File baseDir;
     private final VersionManager versionManager;
@@ -148,7 +159,7 @@ public class GameLauncher {
             LOG.warn("Você pode instalar abrindo o launcher oficial da Mojang e iniciando o Minecraft uma vez.");
         }
 
-        int targetJava = detail.getJavaVersion() != null ? detail.getJavaVersion().getMajorVersion() : 21;
+        int targetJava = detail.getJavaVersion() != null ? detail.getJavaVersion().getMajorVersion() : DEFAULT_JAVA_VERSION;
         LOG.warn("Usando fallback: procurando Java {} no sistema...", targetJava);
 
         List<JavaDetector.JavaInstall> installs = JavaDetector.detectAll();
@@ -185,9 +196,17 @@ public class GameLauncher {
 
         List<String> args = new ArrayList<>();
 
-        Map<String, String> placeholders = buildPlaceholders(detail, profile, account, gameDir);
+        // HIGH-1 (code review): nativos resolvidos uma única vez. Antes era
+        // chamado 3x (aqui, no else abaixo, e em buildPlaceholders) — cada
+        // chamada relia o marker e resolvia getCanonicalPath. Como
+        // getNativesDir é a única port de extração de natives, cachear
+        // também elimina o risco de comportamento não-determinístico se
+        // o marker for invalidado entre as chamadas.
+        String nativesDir = nativesExtractor.getNativesDir(detail, profile.getGameVersion());
+
+        Map<String, String> placeholders = buildPlaceholders(detail, profile, account, gameDir, nativesDir);
         placeholders.put("classpath", classpath);
-        placeholders.put("natives_directory", nativesExtractor.getNativesDir(detail, profile.getGameVersion()));
+        placeholders.put("natives_directory", nativesDir);
         placeholders.put("classpath_separator", File.pathSeparator);
         placeholders.put("library_directory", new File(baseDir, "libraries").getAbsolutePath());
 
@@ -211,7 +230,7 @@ public class GameLauncher {
             args.add("-cp");
             args.add(classpath);
         } else {
-            args.add("-Djava.library.path=" + nativesExtractor.getNativesDir(detail, profile.getGameVersion()));
+            args.add("-Djava.library.path=" + nativesDir);
             args.add("-cp");
             args.add(classpath);
         }
@@ -251,7 +270,8 @@ public class GameLauncher {
     }
 
     private Map<String, String> buildPlaceholders(VersionDetail detail, LaunchProfile profile,
-                                                   GameProfile account, File gameDir) {
+                                                   GameProfile account, File gameDir,
+                                                   String nativesDir) {
         Map<String, String> map = new HashMap<>();
         map.put("auth_player_name", account.getName());
         map.put("version_name", profile.getGameVersion());
@@ -265,7 +285,7 @@ public class GameLauncher {
         map.put("version_type", "MineLauncher");
         map.put("clientid", "");
         map.put("auth_xuid", "");
-        map.put("natives_directory", nativesExtractor.getNativesDir(detail, profile.getGameVersion()));
+        map.put("natives_directory", nativesDir);
         map.put("launcher_name", "MineLauncher");
         map.put("launcher_version", "1.0.0");
         map.put("library_directory", new File(baseDir, "libraries").getAbsolutePath());
@@ -274,14 +294,32 @@ public class GameLauncher {
         return map;
     }
 
+    /**
+     * Substitui tokens {@code ${key}} no input pelos valores do mapa, em
+     * passada única (sem substituição recursiva).
+     *
+     * <p>MEDIUM do code-review: a versão anterior usava
+     * {@link String#replace(CharSequence, CharSequence)} em loop — global
+     * replace que, se um valor contivesse {@code ${outra_chave}}, era
+     * re-substituído pela próxima iteração. Single-pass via
+     * {@link Matcher} resolve. Tokens desconhecidos são preservados como
+     * estão no output (em vez de virar {@code null}).
+     */
     private String replacePlaceholders(String input, Map<String, String> placeholders) {
-        String result = input;
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            if (entry.getValue() != null) {
-                result = result.replace("${" + entry.getKey() + "}", entry.getValue());
+        Matcher m = PLACEHOLDER_PATTERN.matcher(input);
+        StringBuilder out = new StringBuilder(input.length());
+        while (m.find()) {
+            String key = m.group(1);
+            String value = placeholders.get(key);
+            if (value != null) {
+                m.appendReplacement(out, Matcher.quoteReplacement(value));
+            } else {
+                // Preserva o token original
+                m.appendReplacement(out, Matcher.quoteReplacement(m.group(0)));
             }
         }
-        return result;
+        m.appendTail(out);
+        return out.toString();
     }
 
     public String resolveVersionId(LaunchProfile profile) {
@@ -290,7 +328,7 @@ public class GameLauncher {
         String mcVersion = profile.getGameVersion();
 
         if (loader == null || "vanilla".equals(loader)) {
-            return mcVersion;
+            return assertSafeVersionId(mcVersion);
         }
 
         String candidate;
@@ -308,27 +346,79 @@ public class GameLauncher {
                 candidate = "quilt-loader-" + loaderVersion + "-" + mcVersion;
                 break;
             default:
-                return mcVersion;
+                return assertSafeVersionId(mcVersion);
         }
+
+        // MEDIUM do code-review: valida o candidate antes de usar em
+        // construção de File. Se o usuário configurou um versionId com
+        // path traversal (ex: "../../etc"), o assertSafeVersionId aborta
+        // aqui em vez de deixar LibraryVerifier/NativesExtractor escreverem
+        // arquivos fora de versions/.
+        candidate = assertSafeVersionId(candidate);
 
         File versionDir = new File(baseDir, "versions/" + candidate);
         if (versionDir.exists() && new File(versionDir, candidate + ".json").exists()) {
             return candidate;
         }
 
+        // Fallback: procura diretório existente que case com loader + mc.
+        // MEDIUM do code-review: o substring match original é frágil
+        // (ex: mcVersion "1.2" casava com "1.20"). Preferimos match
+        // exato por prefixo; se houver mais de um candidato, logamos
+        // e usamos o mais recente (maior mtime).
         File versionsDir = new File(baseDir, "versions");
         File[] versionDirs = versionsDir.listFiles(File::isDirectory);
         if (versionDirs != null) {
+            File bestMatch = null;
+            int matchCount = 0;
             for (File dir : versionDirs) {
-                if (dir.getName().contains(loader) && dir.getName().contains(mcVersion)) {
-                    File json = new File(dir, dir.getName() + ".json");
-                    if (json.exists()) return dir.getName();
+                String name = dir.getName();
+                if (!name.contains(loader) || !name.contains(mcVersion)) continue;
+                if (!new File(dir, name + ".json").exists()) continue;
+                matchCount++;
+                if (name.equals(candidate)) {
+                    // Match exato tem prioridade absoluta
+                    return name;
                 }
+                if (bestMatch == null || dir.lastModified() > bestMatch.lastModified()) {
+                    bestMatch = dir;
+                }
+            }
+            if (matchCount > 1) {
+                LOG.warn("Múltiplas versões candidatas para {} ({}); usando a mais recente: {}",
+                        candidate, matchCount, bestMatch != null ? bestMatch.getName() : "?");
+            }
+            if (bestMatch != null) {
+                return bestMatch.getName();
             }
         }
 
         LOG.warn("Versão modded não encontrada localmente: {}, usando vanilla {}", candidate, mcVersion);
-        return mcVersion;
+        return assertSafeVersionId(mcVersion);
+    }
+
+    /**
+     * Valida que um id de versão é seguro para usar em construção de
+     * {@link File}. Rejeita null, vazio, e qualquer id que contenha
+     * sequências de path traversal ({@code ..}) ou separadores de
+     * path ({@code /}, {@code \}, NUL).
+     *
+     * <p>MEDIUM do code-review: protege contra path traversal quando o
+     * usuário configura uma versão com nome malicioso (ou quando um
+     * modloader produz um id estranho).
+     */
+    static String assertSafeVersionId(String versionId) {
+        if (versionId == null || versionId.isEmpty()) {
+            throw new IllegalArgumentException("versionId vazio");
+        }
+        if (versionId.contains("..")
+                || versionId.contains("/")
+                || versionId.contains("\\")
+                || versionId.contains("\0")) {
+            throw new IllegalArgumentException(
+                    "versionId inválido (path traversal?): " + versionId);
+        }
+        return versionId;
     }
 
     /**

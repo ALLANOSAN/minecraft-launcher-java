@@ -39,6 +39,10 @@ public class ProcessSpawner {
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSpawner.class);
 
     private final Set<Process> activeProcesses = Collections.synchronizedSet(new HashSet<>());
+    // MEDIUM do code-review: idempotência do shutdown hook. Sem o flag,
+    // chamar registerShutdownHook() duas vezes registrava dois hooks
+    // tentando matar os mesmos processos, poluindo o log de shutdown.
+    private boolean hookRegistered = false;
 
     /**
      * Inicia o processo com os argumentos fornecidos, encaminha stdout
@@ -73,7 +77,16 @@ public class ProcessSpawner {
                     logCallback.accept(line);
                 }
             } catch (IOException e) {
-                LOG.debug("Stream de log encerrado");
+                // MEDIUM do code-review: distinguir EOF normal de erro real.
+                // readLine() retorna null no EOF, que sai do while sem
+                // lançar. Qualquer IOException que chegue aqui é o
+                // stream sendo fechado externamente (kill/cleanup) ou
+                // um erro de I/O genuíno.
+                if (p.isAlive()) {
+                    LOG.warn("Erro de I/O no stream de log do jogo: {}", e.getMessage());
+                } else {
+                    LOG.debug("Stream de log encerrado (processo finalizado)");
+                }
             }
         });
         logThread.setDaemon(true);
@@ -88,11 +101,19 @@ public class ProcessSpawner {
      * HIGH-11: deve ser chamado UMA VEZ pelo entry point (não pelo
      * construtor) para registrar a cleanup em caso de crash. Caso
      * contrário, testes de unidade que instanciam {@code GameLauncher}
-     * poluem a sequência de shutdown da JVM, e em produção rodar mais
-     * de uma vez acarreta hooks duplicados tentando matar os mesmos
-     * processos.
+     * poluem a sequência de shutdown da JVM.
+     *
+     * <p>MEDIUM do code-review: idempotente — múltiplas chamadas
+     * registram apenas uma vez. Sem isso, rodar o launcher duas vezes
+     * na mesma JVM (ou hot-reload em testes) acumulava hooks
+     * duplicados tentando matar os mesmos processos.
      */
-    public void registerShutdownHook() {
+    public synchronized void registerShutdownHook() {
+        if (hookRegistered) {
+            LOG.debug("Shutdown hook já registrado, ignorando chamada duplicada");
+            return;
+        }
+        hookRegistered = true;
         Runtime.getRuntime().addShutdownHook(new Thread(this::killAll, "MineLauncher-Cleanup"));
     }
 

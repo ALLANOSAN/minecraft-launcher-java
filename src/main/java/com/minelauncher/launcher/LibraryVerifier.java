@@ -42,7 +42,10 @@ public class LibraryVerifier {
      * {@link File#pathSeparator}).
      */
     public String buildClasspath(VersionDetail detail, String versionId) throws IOException {
-        StringBuilder cp = new StringBuilder();
+        // MEDIUM do code-review: defesa em profundidade contra path traversal.
+        GameLauncher.assertSafeVersionId(versionId);
+
+        StringBuilder classpath = new StringBuilder();
 
         for (VersionDetail.Library lib : detail.getLibraries()) {
             if (!lib.isAllowed()) continue;
@@ -51,16 +54,16 @@ public class LibraryVerifier {
             VersionDetail.DownloadFile artifact = lib.getDownloads().getArtifact();
             File libFile = new File(baseDir, "libraries/" + artifact.getPath());
             if (libFile.exists()) {
-                cp.append(libFile.getAbsolutePath()).append(File.pathSeparator);
+                classpath.append(libFile.getAbsolutePath()).append(File.pathSeparator);
             }
         }
 
         File clientJar = new File(baseDir, "versions/" + versionId + "/" + versionId + ".jar");
         if (clientJar.exists()) {
-            cp.append(clientJar.getAbsolutePath());
+            classpath.append(clientJar.getAbsolutePath());
         }
 
-        return cp.toString();
+        return classpath.toString();
     }
 
     /**
@@ -76,6 +79,9 @@ public class LibraryVerifier {
      * quando o marker está ausente ou desatualizado.
      */
     public void verifyAndDownload(VersionDetail detail, String versionId) {
+        // MEDIUM do code-review: defesa em profundidade contra path traversal.
+        GameLauncher.assertSafeVersionId(versionId);
+
         int missing = 0;
         int downloaded = 0;
         int verifiedSkipped = 0;
