@@ -2,9 +2,6 @@ package com.minelauncher.settings;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import com.minelauncher.models.GameProfile;
 import com.minelauncher.utils.SecretCodec;
@@ -15,13 +12,18 @@ import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.Optional; // HIGH-14
 
 public class SettingsManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(SettingsManager.class);
-    private static final SettingsManager INSTANCE = new SettingsManager();
+    // BUG-FIX: GSON e ACCOUNTS_TYPE DEVEM vir ANTES de INSTANCE. Java inicializa
+    // campos estáticos em ordem textual (JLS §12.4.1) e o construtor do
+    // SettingsManager chama load(), que usa GSON. Se INSTANCE for declarado
+    // primeiro, GSON é null no momento do load() e explode com NPE.
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Type ACCOUNTS_TYPE = new TypeToken<List<GameProfile>>(){}.getType();
+    private static final SettingsManager INSTANCE = new SettingsManager();
 
     private final File baseDir;
     private final File settingsFile;
@@ -39,6 +41,7 @@ public class SettingsManager {
     private String curseForgeProxyUrl;
     private String modrinthApiUrl;
     private String errorReportUrl;
+    private boolean errorReportingEnabled = false; // CRIT-4: opt-in (default off)
     private String backupPath;
 
     private SettingsManager() {
@@ -92,6 +95,7 @@ public class SettingsManager {
                     curseForgeProxyUrl = data.curseForgeProxyUrl != null && !data.curseForgeProxyUrl.isBlank() ? data.curseForgeProxyUrl : "https://minecraft-launcher-java.vercel.app/api/cf";
                     modrinthApiUrl = data.modrinthApiUrl != null && !data.modrinthApiUrl.isBlank() ? data.modrinthApiUrl : "https://api.modrinth.com/v2";
                     errorReportUrl = data.errorReportUrl != null ? data.errorReportUrl : "";
+                    errorReportingEnabled = data.errorReportingEnabled; // CRIT-4
                     backupPath = data.backupPath != null ? data.backupPath : "";
                 }
             } catch (Exception e) {
@@ -133,6 +137,7 @@ public class SettingsManager {
             data.curseForgeProxyUrl = curseForgeProxyUrl;
             data.modrinthApiUrl = modrinthApiUrl;
             data.errorReportUrl = errorReportUrl;
+            data.errorReportingEnabled = errorReportingEnabled; // CRIT-4
             data.backupPath = backupPath;
             Files.writeString(settingsFile.toPath(), GSON.toJson(data));
 
@@ -205,6 +210,9 @@ public class SettingsManager {
     public void setModrinthApiUrl(String url) { this.modrinthApiUrl = url; save(); }
     public String getErrorReportUrl() { return errorReportUrl; }
     public void setErrorReportUrl(String url) { this.errorReportUrl = url; save(); }
+    /** CRIT-4: opt-in para envio de reportes de erro. Default false. */
+    public boolean isErrorReportingEnabled() { return errorReportingEnabled; }
+    public void setErrorReportingEnabled(boolean enabled) { this.errorReportingEnabled = enabled; save(); }
     public String getBackupPath() { return backupPath; }
     public void setBackupPath(String path) { this.backupPath = path; save(); }
 
@@ -227,13 +235,25 @@ public class SettingsManager {
     }
 
     public GameProfile getSelectedAccount() {
+        // HIGH-14: log explícito quando o UUID salvo não bate com
+        // nenhuma conta conhecida. Antes silenciava, fazendo o usuário
+        // jogar em outra conta sem saber.
         if (selectedAccountUuid == null && !accounts.isEmpty()) {
+            LOG.debug("Nenhum UUID selecionado salvo; usando primeira conta: {}",
+                    accounts.get(0).getName());
             return accounts.get(0);
         }
-        return accounts.stream()
-                .filter(a -> a.getUuid().toString().equals(selectedAccountUuid))
-                .findFirst()
-                .orElse(accounts.isEmpty() ? null : accounts.get(0));
+        Optional<GameProfile> match = accounts.stream()
+                .filter(a -> a.getUuid() != null
+                        && a.getUuid().toString().equals(selectedAccountUuid))
+                .findFirst();
+        if (match.isEmpty() && !accounts.isEmpty()) {
+            LOG.warn("Conta selecionada UUID={} não encontrada entre {} conta(s) carregada(s); "
+                            + "usando fallback para primeira conta: {}",
+                    selectedAccountUuid, accounts.size(), accounts.get(0).getName());
+            return accounts.get(0);
+        }
+        return match.orElse(null);
     }
 
     private static class SettingsData {
@@ -246,6 +266,7 @@ public class SettingsManager {
         public String curseForgeProxyUrl;
         public String modrinthApiUrl;
         public String errorReportUrl;
+        public boolean errorReportingEnabled; // CRIT-4
         public String backupPath;
     }
 }

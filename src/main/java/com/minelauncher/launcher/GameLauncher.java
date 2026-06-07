@@ -8,27 +8,76 @@ import com.minelauncher.utils.PlatformUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.nio.file.Files;
-import java.util.*;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
+/**
+ * Orquestra o lançamento do Minecraft.
+ *
+ * <p>Composição por delegação (refactor por decomposição). Cada
+ * responsabilidade vive na sua própria classe:
+ * <ul>
+ *     <li>{@link LibraryVerifier} — verifica SHA1, baixa libraries
+ *     faltantes e monta o classpath;</li>
+ *     <li>{@link NativesExtractor} — extrai as libraries nativas
+ *     (.so/.dll/.dylib) com marker cache;</li>
+ *     <li>{@link ProcessSpawner} — inicia o processo, encaminha o
+ *     log via callback, e gerencia o ciclo de vida (kill, shutdown
+ *     hook, isRunning).</li>
+ * </ul>
+ *
+ * <p>O que sobrou aqui é puramente orquestração + decisões que
+ * envolvem mais de uma dessas peças: resolução de versão
+ * (vanilla/forge/fabric/neoforge/quilt), resolução do Java runtime,
+ * montagem dos argumentos JVM/game, e os placeholders de substituição.
+ *
+ * <p>A API pública é mantida estável para que {@code GameLaunchService},
+ * {@code WindowService}, {@code MainController} e os testes não
+ * precisem ser alterados: {@link #launch}, {@link #resolveVersionId},
+ * {@link #registerShutdownHook}, {@link #killGame}, {@link #kill},
+ * {@link #killAll}, {@link #isRunning}.
+ */
 public class GameLauncher {
 
     private static final Logger LOG = LoggerFactory.getLogger(GameLauncher.class);
+
     private final File baseDir;
     private final VersionManager versionManager;
-    private final DownloadManager downloader = new DownloadManager();
+    private final LibraryVerifier libraryVerifier;
+    private final NativesExtractor nativesExtractor;
+    private final ProcessSpawner processSpawner;
     private final Gson gson = new Gson();
-    private final Set<Process> activeProcesses = java.util.Collections.synchronizedSet(new HashSet<>());
 
     public GameLauncher(File baseDir, VersionManager versionManager) {
+        this(baseDir, versionManager, new DownloadManager());
+    }
+
+    public GameLauncher(File baseDir, VersionManager versionManager, DownloadManager downloader) {
         this.baseDir = baseDir;
         this.versionManager = versionManager;
-        // Hook de desligamento para limpar processos órfãos
-        Runtime.getRuntime().addShutdownHook(new Thread(this::kill, "MineLauncher-Cleanup"));
+        this.libraryVerifier = new LibraryVerifier(baseDir, downloader);
+        this.nativesExtractor = new NativesExtractor(baseDir);
+        this.processSpawner = new ProcessSpawner();
+        // HIGH-11: NÃO registra shutdown hook aqui. A hook só deve ser
+        // registrada UMA VEZ pelo entry point (MineLauncher.java), não
+        // por cada GameLauncher instanciado. Caso contrário, testes de
+        // unidade que instanciam GameLauncher poluem a sequência de
+        // shutdown da JVM, e em produção rodar mais de uma vez acarreta
+        // hooks duplicados tentando matar os mesmos processos.
+    }
+
+    /**
+     * HIGH-11: deve ser chamado UMA VEZ pelo entry point (não pelo
+     * construtor) para registrar a cleanup em caso de crash.
+     */
+    public void registerShutdownHook() {
+        processSpawner.registerShutdownHook();
     }
 
     /**
@@ -37,32 +86,20 @@ public class GameLauncher {
     public void launch(LaunchProfile profile, GameProfile account,
                        Consumer<String> logCallback) throws IOException {
 
-        // 1. Resolver versão real (modded → nome do diretório)
         String versionId = resolveVersionId(profile);
         LOG.info("Preparando lançamento: {} com {} (versão real: {})", profile.getName(), profile.getGameVersion(), versionId);
 
-        // 2. Obter detalhes da versão
         VersionDetail detail = versionManager.getVersionDetail(versionId);
         if (detail == null) {
             throw new IOException("Versão não encontrada: " + versionId);
         }
 
-        // 3. Determinar Java
         String javaPath = resolveJavaPath(profile, detail);
-
-        // 3.5. Verificar e baixar libraries/assets faltantes
-        downloadMissingLibraries(detail, versionId);
-
-        // 4. Montar classpath
-        String classpath = buildClasspath(detail, versionId);
-
-        // 5. Determinar diretório do jogo
+        libraryVerifier.verifyAndDownload(detail, versionId);
+        String classpath = libraryVerifier.buildClasspath(detail, versionId);
         File gameDir = resolveGameDir(profile);
-
-        // 6. Montar argumentos
         List<String> args = buildLaunchArgs(detail, profile, account, classpath, javaPath, gameDir);
 
-        // LOG DE DEBUG - mostra cada argumento separado para diagnóstico, mas mascare o token
         LOG.info("=== COMANDO COMPLETO ({} args) ===", args.size());
         for (int i = 0; i < args.size(); i++) {
             String arg = args.get(i);
@@ -76,57 +113,22 @@ public class GameLauncher {
         }
         LOG.info("=== FIM DO COMANDO ===");
 
-        // 6. Spawn do processo
-        ProcessBuilder pb = new ProcessBuilder(args);
-        pb.directory(gameDir);
-        pb.redirectErrorStream(true);
-
-        // Capturar logs
-        pb.environment().put("INST_LAUNCHER", "MineLauncher");
-
-        Process p = pb.start();
-        activeProcesses.add(p);
-        p.onExit().thenRun(() -> activeProcesses.remove(p));
-
-        // 7. Ler output em thread separada
-        Thread logThread = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(p.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    logCallback.accept(line);
-                }
-            } catch (IOException e) {
-                LOG.debug("Stream de log encerrado");
-            }
-        });
-        logThread.setDaemon(true);
-        logThread.setName("Minecraft-Log");
-        logThread.start();
-
-        LOG.info("Minecraft iniciado (PID: {})", p.pid());
+        processSpawner.spawn(args, gameDir, logCallback);
     }
 
     private String resolveJavaPath(LaunchProfile profile, VersionDetail detail) {
-        // 1. Usuário configurou um Java manualmente no perfil — respeitar sempre
         if (profile.getJavaPath() != null && !profile.getJavaPath().isEmpty()) {
             LOG.info("Usando Java configurado no perfil: {}", profile.getJavaPath());
             return profile.getJavaPath();
         }
 
-        // 2. Usar o Java especificado pelo modpack/versão via javaVersion.component
-        //    Exemplo: { "component": "java-runtime-delta", "majorVersion": 21 }
-        //    Caminho: ~/.minecraft/runtime/<component>/<os>/<component>/bin/java
         if (detail.getJavaVersion() != null && detail.getJavaVersion().getComponent() != null) {
             String component = detail.getJavaVersion().getComponent();
             String home = System.getProperty("user.home");
 
-            // QUAL-15: usa PlatformUtil para detectar OS+arch e extensão do executável
-            // em vez do bloco if/else duplicado que existia aqui.
-            String osKey = com.minelauncher.utils.PlatformUtil.getMojangOSKey();
-            String ext = com.minelauncher.utils.PlatformUtil.getJavaExecutableExtension();
+            String osKey = PlatformUtil.getMojangOSKey();
+            String ext = PlatformUtil.getJavaExecutableExtension();
 
-            // Tentar os dois formatos de caminho que a Mojang usa
             String[] candidates = {
                 java.nio.file.Paths.get(home, ".minecraft", "runtime", component, osKey, component, "bin", "java" + ext).toString(),
                 java.nio.file.Paths.get(home, ".minecraft", "runtime", component, osKey, "bin", "java" + ext).toString(),
@@ -146,7 +148,6 @@ public class GameLauncher {
             LOG.warn("Você pode instalar abrindo o launcher oficial da Mojang e iniciando o Minecraft uma vez.");
         }
 
-        // 3. Fallback: detectar Java do sistema com a versão correta
         int targetJava = detail.getJavaVersion() != null ? detail.getJavaVersion().getMajorVersion() : 21;
         LOG.warn("Usando fallback: procurando Java {} no sistema...", targetJava);
 
@@ -166,88 +167,9 @@ public class GameLauncher {
         return "java";
     }
 
-    private String buildClasspath(VersionDetail detail, String versionId) throws IOException {
-        StringBuilder cp = new StringBuilder();
-
-        // Bibliotecas da versão
-        for (VersionDetail.Library lib : detail.getLibraries()) {
-            if (!lib.isAllowed()) continue;
-            if (lib.getDownloads() == null || lib.getDownloads().getArtifact() == null) continue;
-
-            VersionDetail.DownloadFile artifact = lib.getDownloads().getArtifact();
-            File libFile = new File(baseDir, "libraries/" + artifact.getPath());
-            if (libFile.exists()) {
-                cp.append(libFile.getAbsolutePath()).append(File.pathSeparator);
-            }
-        }
-
-        // JAR do cliente
-        File clientJar = new File(baseDir, "versions/" + versionId + "/" + versionId + ".jar");
-        if (clientJar.exists()) {
-            cp.append(clientJar.getAbsolutePath());
-        }
-
-        return cp.toString();
-    }
-
-    /**
-     * Verifica e baixa libraries que estão faltando localmente.
-     */
-    private void downloadMissingLibraries(VersionDetail detail, String versionId) {
-        int missing = 0;
-        int downloaded = 0;
-
-        for (VersionDetail.Library lib : detail.getLibraries()) {
-            if (!lib.isAllowed()) continue;
-            if (lib.getDownloads() == null || lib.getDownloads().getArtifact() == null) continue;
-
-            VersionDetail.DownloadFile artifact = lib.getDownloads().getArtifact();
-            File libFile = new File(baseDir, "libraries/" + artifact.getPath());
-
-            boolean needsDownload = !libFile.exists();
-
-            // Verificar SHA1 de libraries existentes
-            if (!needsDownload && artifact.getSha1() != null && !artifact.getSha1().isEmpty()) {
-                try {
-                    String actualSha1 = downloader.calculateSHA1(libFile);
-                    if (!artifact.getSha1().equals(actualSha1)) {
-                        LOG.warn("SHA1 mismatch para {}: esperado {}, obtido {}. Re-download...", libFile.getName(), artifact.getSha1(), actualSha1);
-                        needsDownload = true;
-                    }
-                } catch (Exception e) {
-                    LOG.warn("Erro ao verificar SHA1 de {}: {}", libFile.getName(), e.getMessage());
-                    needsDownload = true;
-                }
-            }
-
-            if (needsDownload) {
-                missing++;
-                try {
-                    libFile.getParentFile().mkdirs();
-                    downloader.download(artifact.getUrl(), libFile, artifact.getSha1(), null);
-                    downloaded++;
-                    LOG.info("Library baixada: {}", libFile.getName());
-                } catch (Exception e) {
-                    LOG.warn("Falha ao baixar library {}: {}", libFile.getName(), e.getMessage());
-                }
-            }
-        }
-
-        // Verificar JAR do cliente
-        File clientJar = new File(baseDir, "versions/" + versionId + "/" + versionId + ".jar");
-        if (!clientJar.exists()) {
-            LOG.warn("JAR do cliente não encontrado: {}", clientJar.getAbsolutePath());
-        }
-
-        if (missing > 0) {
-            LOG.info("Libraries: {} faltantes, {} baixadas com sucesso de {}", missing, downloaded, detail.getLibraries().size());
-        }
-    }
-
     private File resolveGameDir(LaunchProfile profile) {
         if (profile.getGameDir() != null && !profile.getGameDir().isEmpty()) {
             File dir = new File(profile.getGameDir());
-            // Se for caminho relativo, resolver contra baseDir
             if (!dir.isAbsolute()) {
                 dir = new File(baseDir, profile.getGameDir());
             }
@@ -263,70 +185,48 @@ public class GameLauncher {
 
         List<String> args = new ArrayList<>();
 
-        // Mapa de placeholders completo
         Map<String, String> placeholders = buildPlaceholders(detail, profile, account, gameDir);
         placeholders.put("classpath", classpath);
-        placeholders.put("natives_directory", getNativesDir(detail, profile.getGameVersion()));
+        placeholders.put("natives_directory", nativesExtractor.getNativesDir(detail, profile.getGameVersion()));
         placeholders.put("classpath_separator", File.pathSeparator);
         placeholders.put("library_directory", new File(baseDir, "libraries").getAbsolutePath());
 
-        // [1] Executável Java
         args.add(javaPath);
-
-        // [2] RAM — sempre explícito, pois o JSON do NeoForge não define isso
         args.add("-Xmx" + profile.getMaxRam() + "M");
         args.add("-Xms" + profile.getMinRam() + "M");
         args.add("-XX:+UseG1GC");
         args.add("-XX:MaxGCPauseMillis=50");
 
         if (detail.getArguments() != null && detail.getArguments().getJvm() != null) {
-            // [3] JVM args do JSON — resolver e substituir placeholders
-            //     O JSON do NeoForge já contém, nesta ordem:
-            //       -Djava.net.preferIPv6Addresses -DignoreList -DlibraryDirectory
-            //       -p <modulePath>
-            //       --add-modules ALL-MODULE-PATH
-            //       --add-opens ... --add-exports ...
-            //     É CRÍTICO manter essa ordem. Não reordenar, não filtrar.
             List<String> jvmArgs = detail.getArguments().resolveJvmArgs(gson);
 
-            // Filtrar apenas -cp/-Xmx/-Xms que o pai vanilla possa ter injetado via mergeParent
-            // para evitar duplicatas com o que já adicionamos acima
             boolean skipNext = false;
             for (String raw : jvmArgs) {
                 if (skipNext) { skipNext = false; continue; }
-                // Pular -cp do pai vanilla (vamos adicionar o nosso logo depois)
                 if (raw.equals("-cp") || raw.equals("--class-path")) { skipNext = true; continue; }
-                // Pular -Xmx/-Xms/-XX que já adicionamos
                 if (raw.startsWith("-Xmx") || raw.startsWith("-Xms") || raw.startsWith("-XX:")) continue;
-
                 args.add(replacePlaceholders(raw, placeholders));
             }
 
-            // [4] Classpath (-cp) — sempre após os JVM args do JSON
             args.add("-cp");
             args.add(classpath);
-
         } else {
-            // Fallback legacy (versões pré-1.13 sem bloco "arguments")
-            args.add("-Djava.library.path=" + getNativesDir(detail, profile.getGameVersion()));
+            args.add("-Djava.library.path=" + nativesExtractor.getNativesDir(detail, profile.getGameVersion()));
             args.add("-cp");
             args.add(classpath);
         }
 
-        // [5] Main class — DEVE vir imediatamente após o -cp <classpath>
         String mainClass = detail.getMainClass();
         if (mainClass == null || mainClass.isEmpty()) {
             mainClass = "net.minecraft.client.main.Main";
         }
         args.add(mainClass);
 
-        // [6] Game args
         if (detail.getArguments() != null && detail.getArguments().getGame() != null) {
             for (String arg : detail.getArguments().resolveGameArgs(gson)) {
                 args.add(replacePlaceholders(arg, placeholders));
             }
         } else {
-            // Forma legada (pré-1.13)
             args.addAll(Arrays.asList(
                     "--username", account.getName(),
                     "--version", profile.getGameVersion(),
@@ -340,7 +240,6 @@ public class GameLauncher {
             ));
         }
 
-        // [7] Tamanho da janela
         if (!profile.isFullscreen()) {
             args.add("--width");
             args.add(String.valueOf(profile.getWidth()));
@@ -366,7 +265,7 @@ public class GameLauncher {
         map.put("version_type", "MineLauncher");
         map.put("clientid", "");
         map.put("auth_xuid", "");
-        map.put("natives_directory", getNativesDir(detail, profile.getGameVersion()));
+        map.put("natives_directory", nativesExtractor.getNativesDir(detail, profile.getGameVersion()));
         map.put("launcher_name", "MineLauncher");
         map.put("launcher_version", "1.0.0");
         map.put("library_directory", new File(baseDir, "libraries").getAbsolutePath());
@@ -385,58 +284,6 @@ public class GameLauncher {
         return result;
     }
 
-    private String getNativesDir(VersionDetail detail, String versionId) {
-        File nativesDir = new File(baseDir, "versions/" + versionId + "/natives");
-        nativesDir.mkdirs();
-
-        // Extrair natives dos JARs
-        for (VersionDetail.Library lib : detail.getLibraries()) {
-            if (!lib.isAllowed() || lib.getNatives() == null) continue;
-            if (lib.getDownloads() == null || lib.getDownloads().getClassifiers() == null) continue;
-
-            String osKey = getOSKey();
-            String classifier = lib.getNatives().get(osKey);
-            if (classifier == null) continue;
-
-            VersionDetail.DownloadFile nativeFile = lib.getDownloads().getClassifiers().get(classifier);
-            if (nativeFile == null) continue;
-
-            File jarFile = new File(baseDir, "libraries/" + nativeFile.getPath());
-            if (!jarFile.exists()) continue;
-
-            try (ZipFile zip = new ZipFile(jarFile)) {
-                Enumeration<? extends ZipEntry> entries = zip.entries();
-                while (entries.hasMoreElements()) {
-                    ZipEntry entry = entries.nextElement();
-                    String name = entry.getName().replace('\\', '/');
-                    if (name.endsWith(".so") || name.endsWith(".dll") || name.endsWith(".dylib")
-                            || name.endsWith(".jnilib")) {
-                        String fileName = new File(name).getName();
-                        File dest = new File(nativesDir, fileName);
-                        String canonicalDest = dest.getCanonicalPath();
-                        String canonicalNatives = nativesDir.getCanonicalPath();
-                        if (!canonicalDest.startsWith(canonicalNatives + File.separator)) {
-                            throw new IOException("Entrada de native inválida (Zip Slip): " + entry.getName());
-                        }
-                        if (!dest.exists()) {
-                            try (InputStream is = zip.getInputStream(entry)) {
-                                Files.copy(is, dest.toPath());
-                            }
-                        }
-                    }
-                }
-            } catch (IOException e) {
-                LOG.warn("Erro ao extrair natives de {}", jarFile.getName(), e);
-            }
-        }
-
-        return nativesDir.getAbsolutePath();
-    }
-
-    /**
-     * Resolve o ID real da versão para perfis com mod loader.
-     * Ex: gameVersion=1.21.4, modLoader=neoforge, modLoaderVersion=21.4.157 → "neoforge-21.4.157"
-     */
     public String resolveVersionId(LaunchProfile profile) {
         String loader = profile.getModLoader();
         String loaderVersion = profile.getModLoaderVersion();
@@ -446,7 +293,6 @@ public class GameLauncher {
             return mcVersion;
         }
 
-        // Construir nome esperado do diretório
         String candidate;
         switch (loader) {
             case "forge":
@@ -465,13 +311,11 @@ public class GameLauncher {
                 return mcVersion;
         }
 
-        // Verificar se o diretório existe
         File versionDir = new File(baseDir, "versions/" + candidate);
         if (versionDir.exists() && new File(versionDir, candidate + ".json").exists()) {
             return candidate;
         }
 
-        // Fallback: procurar diretório que contenha o loader
         File versionsDir = new File(baseDir, "versions");
         File[] versionDirs = versionsDir.listFiles(File::isDirectory);
         if (versionDirs != null) {
@@ -487,25 +331,32 @@ public class GameLauncher {
         return mcVersion;
     }
 
+    /**
+     * HIGH-11: mata UM processo específico e remove do set de ativos.
+     * Usado quando o usuário clica em "Encerrar jogo" — não afeta
+     * outros jogos que porventura estejam rodando.
+     */
+    public void killGame(Process p) {
+        processSpawner.kill(p);
+    }
+
+    /**
+     * HIGH-11: mata TODOS os processos ativos. Só deve ser chamado pelo
+     * shutdown hook registrado em {@link #registerShutdownHook()}, ou
+     * explicitamente pelo usuário via menu "Encerrar tudo".
+     */
+    public void killAll() {
+        processSpawner.killAll();
+    }
+
+    /**
+     * Mantido para compatibilidade: alias de killAll().
+     */
     public void kill() {
-        synchronized (activeProcesses) {
-            for (Process p : activeProcesses) {
-                if (p.isAlive()) {
-                    p.destroyForcibly();
-                }
-            }
-            activeProcesses.clear();
-        }
-        LOG.info("Processos do jogo finalizados");
+        processSpawner.killAll();
     }
 
     public boolean isRunning() {
-        synchronized (activeProcesses) {
-            return activeProcesses.stream().anyMatch(Process::isAlive);
-        }
-    }
-
-    private String getOSKey() {
-        return PlatformUtil.getOSKey();
+        return processSpawner.isRunning();
     }
 }
