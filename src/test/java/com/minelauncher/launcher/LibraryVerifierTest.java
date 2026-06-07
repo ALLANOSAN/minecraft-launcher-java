@@ -99,14 +99,29 @@ class LibraryVerifierTest {
 
     @Test
     void buildClasspath_skipsLibrariesWithoutArtifact() throws IOException {
-        // Detalhe com library que tem downloads=null — não deve estourar
-        String json = "{\"id\":\"1.20.1\",\"libraries\":[{\"name\":\"x:y:1.0\"}]}";
+        // L3 do code-review (commit 655ae88): assertion anterior
+        // (`assertFalse(classpath.contains("y:1.0"))`) passava
+        // trivialmente. Agora criamos o jar no disco e verificamos
+        // que ele NÃO entra no classpath por causa da regra de
+        // negócio (downloads==null), não por causa de o arquivo
+        // simplesmente não existir.
+        String json = "{\"id\":\"1.20.1\",\"libraries\":["
+                + "{\"name\":\"org.y:y:1.0\",\"downloads\":null}"
+                + "]}";
         VersionDetail detail = new Gson().fromJson(json, VersionDetail.class);
 
-        // Não vai ter nenhum lib no classpath, e client jar não existe — resultado é "" ou só separators
+        // Cria o jar mas sem que VersionDetail saiba dele (downloads==null)
+        File libFile = new File(tempDir, "libraries/org/y/1.0/y-1.0.jar");
+        libFile.getParentFile().mkdirs();
+        Files.writeString(libFile.toPath(), "should be ignored");
+        assertTrue(libFile.exists(), "precondição: jar existe no disco");
+
         String classpath = verifier.buildClasspath(detail, "1.20.1");
-        // Aceita qualquer string sem exceção e sem entries de lib
-        assertFalse(classpath.contains("y:1.0"));
+
+        assertFalse(classpath.contains("y-1.0.jar"),
+                "lib com downloads==null nunca deve entrar no classpath, mesmo que o jar exista no disco");
+        assertFalse(classpath.contains("org/y/1.0"),
+                "paths de libs sem artifact não devem vazar para o classpath");
     }
 
     @Test

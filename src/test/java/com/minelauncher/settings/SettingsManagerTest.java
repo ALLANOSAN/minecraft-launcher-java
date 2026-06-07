@@ -91,6 +91,6 @@ class SettingsManagerTest {
         SettingsManager m = SettingsManager.getInstance();
         assertNotNull(m.getLanguage());
         assertNotNull(m.getTheme());
-        assertFalse(m.getAccounts() == null, "accounts não pode ser null");
+        assertNotNull(m.getAccounts(), "accounts não pode ser null");
     }
 }

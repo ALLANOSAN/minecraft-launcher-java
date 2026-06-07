@@ -328,7 +328,7 @@ public class GameLauncher {
         String mcVersion = profile.getGameVersion();
 
         if (loader == null || "vanilla".equals(loader)) {
-            return assertSafeVersionId(mcVersion);
+            return assertSafeVersionId(mcVersion, "mcVersion (perfil: " + profile.getName() + ")");
         }
 
         String candidate;
@@ -346,7 +346,7 @@ public class GameLauncher {
                 candidate = "quilt-loader-" + loaderVersion + "-" + mcVersion;
                 break;
             default:
-                return assertSafeVersionId(mcVersion);
+                return assertSafeVersionId(mcVersion, "mcVersion (perfil: " + profile.getName() + ")");
         }
 
         // MEDIUM do code-review: valida o candidate antes de usar em
@@ -354,7 +354,7 @@ public class GameLauncher {
         // path traversal (ex: "../../etc"), o assertSafeVersionId aborta
         // aqui em vez de deixar LibraryVerifier/NativesExtractor escreverem
         // arquivos fora de versions/.
-        candidate = assertSafeVersionId(candidate);
+        candidate = assertSafeVersionId(candidate, "candidate (loader=" + loader + ")");
 
         File versionDir = new File(baseDir, "versions/" + candidate);
         if (versionDir.exists() && new File(versionDir, candidate + ".json").exists()) {
@@ -394,31 +394,50 @@ public class GameLauncher {
         }
 
         LOG.warn("Versão modded não encontrada localmente: {}, usando vanilla {}", candidate, mcVersion);
-        return assertSafeVersionId(mcVersion);
+        return assertSafeVersionId(mcVersion, "mcVersion (perfil: " + profile.getName() + ")");
     }
 
     /**
      * Valida que um id de versão é seguro para usar em construção de
      * {@link File}. Rejeita null, vazio, e qualquer id que contenha
      * sequências de path traversal ({@code ..}) ou separadores de
-     * path ({@code /}, {@code \}, NUL).
+     * path ({@code /}, {@code \\}, NUL).
      *
      * <p>MEDIUM do code-review: protege contra path traversal quando o
      * usuário configura uma versão com nome malicioso (ou quando um
      * modloader produz um id estranho).
+     *
+     * <p>M2 do code-review (commit 655ae88): esta validação é uma
+     * breaking change semântica — antes, {@code resolveVersionId}
+     * retornava {@code mcVersion} mesmo quando ele era null/empty, o
+     * que causava NPE mais tarde em {@code getVersionDetail(null)}.
+     * Agora joga {@link IllegalArgumentException} cedo com mensagem
+     * clara, o que o chamador (GameLaunchService) propaga para a UI
+     * via callback de erro.
+     *
+     * @param context rótulo curto de onde veio o id (ex: "mcVersion",
+     *                "candidate") — incluído na mensagem de erro para
+     *                facilitar debug de perfis legados corrompidos.
      */
-    static String assertSafeVersionId(String versionId) {
+    static String assertSafeVersionId(String versionId, String context) {
         if (versionId == null || versionId.isEmpty()) {
-            throw new IllegalArgumentException("versionId vazio");
+            throw new IllegalArgumentException(
+                    "versionId vazio (campo: " + context + ")");
         }
         if (versionId.contains("..")
                 || versionId.contains("/")
                 || versionId.contains("\\")
                 || versionId.contains("\0")) {
             throw new IllegalArgumentException(
-                    "versionId inválido (path traversal?): " + versionId);
+                    "versionId inválido (path traversal?) campo=" + context
+                            + " valor=" + versionId);
         }
         return versionId;
+    }
+
+    /** Compatibilidade: overload sem contexto. */
+    static String assertSafeVersionId(String versionId) {
+        return assertSafeVersionId(versionId, "versionId");
     }
 
     /**

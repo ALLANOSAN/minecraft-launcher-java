@@ -90,8 +90,12 @@ public class NativesExtractor {
                     LOG.debug("Natives já extraídos ({} jars, marker válido); pulando re-extração", nativeJars.size());
                     return nativesDir.getAbsolutePath();
                 }
-            } catch (IOException ignored) {
-                // marker corrompido, re-extrair
+            } catch (IOException e) {
+                // M1 do code-review (commit 655ae88): antes engolido
+                // silenciosamente; agora log em debug. Marker corrompido
+                // (permissão, FS cheio, ENCODING) -> re-extrair é o
+                // comportamento correto, mas o motivo fica registrado.
+                LOG.debug("Marker de natives ilegível em {}: re-extraindo", marker, e);
             }
         }
 
