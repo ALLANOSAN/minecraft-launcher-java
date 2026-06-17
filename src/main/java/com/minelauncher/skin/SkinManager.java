@@ -108,6 +108,10 @@ public class SkinManager {
                 String uuidNoDash = uuid.toString().replace("-", "");
                 String profileJson = getJson(SESSION_PROFILE_URL + uuidNoDash + "?unsigned=false");
 
+                if (profileJson == null || profileJson.isBlank()) {
+                    LOG.warn("Profile vazio/204 para UUID {}", uuid);
+                    return null;
+                }
                 JsonObject profile = JsonParser.parseString(profileJson).getAsJsonObject();
                 String name = JsonUtils.getStringOrThrow(profile, "name", "SessionProfile");
                 JsonArray properties = profile.getAsJsonArray("properties");
@@ -160,6 +164,10 @@ public class SkinManager {
 
                 // NameMC profile API
                 String json = getJson(NAMEMC_PROFILE_API + uuidHex);
+                if (json == null || json.isBlank()) {
+                    LOG.warn("NameMC profile vazio para {}", username);
+                    return null;
+                }
                 JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
 
                 // NameMC devolve "skinUrl" no objeto raiz
