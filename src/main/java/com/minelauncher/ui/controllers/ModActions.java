@@ -7,8 +7,6 @@ import com.minelauncher.mods.ModManager;
 import com.minelauncher.profiles.ProfileManager;
 import com.minelauncher.settings.SettingsManager;
 import javafx.application.Platform;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
@@ -221,10 +219,28 @@ public class ModActions {
                 } else {
                     LaunchProfile profile = profileManager.getActiveProfile();
                     if (profile == null) throw new Exception("Nenhum perfil ativo");
-                    File modsDir = new File(SettingsManager.getInstance().getBaseDir(),
-                            profile.getGameDir() != null ? profile.getGameDir() + "/mods" : "mods");
+
+                    // Resolver diretório do jogo do perfil
+                    File gameDir;
+                    if (profile.getGameDir() != null && !profile.getGameDir().isBlank()) {
+                        File gd = new File(profile.getGameDir());
+                        if (gd.isAbsolute()) {
+                            gameDir = gd;
+                        } else {
+                            gameDir = new File(baseDir, profile.getGameDir());
+                        }
+                    } else {
+                        gameDir = baseDir;
+                    }
+                    File modsDir = new File(gameDir, "mods");
                     modsDir.mkdirs();
                     modManager.installMod(modsDir, mod);
+
+                    // Registrar mod no perfil
+                    if (!profile.getMods().contains(mod.getFileName())) {
+                        profile.getMods().add(mod.getFileName());
+                        profileManager.save();
+                    }
                 }
 
                 Platform.runLater(() -> {
@@ -245,6 +261,7 @@ public class ModActions {
 
     public void removeSelected() {
         String selected = controller.getModList().getSelectionModel().getSelectedItem();
+        LOG.info("Botão remover clicado. Item selecionado: '{}'", selected);
         if (selected == null) {
             controller.getStatusLabel().setText("Selecione um item para remover");
             return;
@@ -252,25 +269,23 @@ public class ModActions {
 
         if (selected.startsWith("[Modpack]") || selected.startsWith("[Perfil]")) {
             int index = controller.getModList().getSelectionModel().getSelectedIndex();
-            if (index < 0 || index >= controller.getLastSearchResults().size()) return;
+            LOG.info("Índice selecionado: {}", index);
+            if (index < 0 || index >= controller.getLastSearchResults().size()) {
+                LOG.warn("Índice fora dos limites do lastSearchResults (tamanho: {})", controller.getLastSearchResults().size());
+                return;
+            }
             ModInfo item = controller.getLastSearchResults().get(index);
             String displayName = item.getName();
+            LOG.info("Item mapeado: name='{}', id='{}', source='{}'", item.getName(), item.getId(), item.getSource());
             File baseDir = SettingsManager.getInstance().getBaseDir();
 
             File targetDir = null;
             if (selected.startsWith("[Modpack]")) {
-                String dirName = item.getFileName() != null ? item.getFileName() : item.getName();
+                // O 'id' do ModInfo para modpacks instalados é o nome do diretório
+                String dirName = item.getId();
                 File modpacksRoot = new File(baseDir, "modpacks");
                 targetDir = new File(modpacksRoot, dirName);
-                if (targetDir != null && !targetDir.exists() && modpacksRoot.exists()) {
-                    for (File d : modpacksRoot.listFiles(File::isDirectory)) {
-                        if (d.getName().equals(dirName)
-                                || d.getName().toLowerCase().contains(dirName.toLowerCase())) {
-                            targetDir = d;
-                            break;
-                        }
-                    }
-                }
+                LOG.info("Modpack detectado. Pasta alvo: {}", targetDir.getAbsolutePath());
             } else {
                 // [Perfil] — target dir = profile.gameDir (se existir)
                 if (profileManager != null) {
@@ -279,6 +294,9 @@ public class ModActions {
                             .findFirst().orElse(null);
                     if (p != null && p.getGameDir() != null && !p.getGameDir().isBlank()) {
                         targetDir = new File(p.getGameDir());
+                        LOG.info("Perfil avulso detectado. Pasta alvo: {}", targetDir.getAbsolutePath());
+                    } else {
+                        LOG.info("Perfil avulso detectado sem pasta de jogo.");
                     }
                 }
             }
@@ -289,13 +307,36 @@ public class ModActions {
 
             final File finalTargetDir = targetDir;
             final String finalDisplayName = displayName;
+            LOG.info("Exibindo diálogo de confirmação para: {}", finalDisplayName);
             showConfirmDialog("Remover instalação", "Remover \"" + displayName + "\"?", bodyStr, ok -> {
+                LOG.info("Resposta do diálogo de confirmação: {}", ok);
                 if (ok) {
-                    if (finalTargetDir != null && finalTargetDir.exists()) {
-                        com.minelauncher.utils.FileUtils.deleteDirectory(finalTargetDir);
+                    LOG.info("Removendo instalação: '{}'", finalDisplayName);
+                    
+                    // Se for Modpack, removemos o diretório e TODOS os perfis que apontam para ele
+                    if (selected.startsWith("[Modpack]") && finalTargetDir != null && finalTargetDir.exists()) {
+                        LOG.info("Limpando perfis por diretório: {}", finalTargetDir.getAbsolutePath());
+                        profileManager.removeProfilesByDir(finalTargetDir.getAbsolutePath());
+                        // Também remove pelo nome caso não tenha gameDir setado corretamente
+                        profileManager.removeProfile(finalDisplayName);
+                        
+                        LOG.info("Deletando diretório físico...");
+                        boolean deleted = com.minelauncher.utils.FileUtils.deleteDirectory(finalTargetDir);
+                        LOG.info("Resultado da deleção do diretório: {}", deleted);
+                    } else {
+                        // Se for Perfil avulso, removemos apenas ele e sua pasta (se houver)
+                        if (finalTargetDir != null && finalTargetDir.exists()) {
+                            LOG.info("Limpando perfis por diretório (avulso): {}", finalTargetDir.getAbsolutePath());
+                            profileManager.removeProfilesByDir(finalTargetDir.getAbsolutePath());
+                            LOG.info("Deletando diretório físico (avulso)...");
+                            com.minelauncher.utils.FileUtils.deleteDirectory(finalTargetDir);
+                        }
+                        LOG.info("Removendo perfil pelo nome: {}", finalDisplayName);
+                        profileManager.removeProfile(finalDisplayName);
                     }
-                    profileManager.removeProfile(finalDisplayName);
+
                     Platform.runLater(() -> {
+                        LOG.info("Atualizando UI após remoção.");
                         controller.loadProfiles();
                         showInstalled();
                         controller.getStatusLabel().setText("Removido: " + finalDisplayName);
@@ -337,6 +378,7 @@ public class ModActions {
                                 dir, profileManager != null ? profileManager.getProfiles() : null);
                         displayNames.add("[Modpack] " + displayName);
                         ModInfo info = new ModInfo(displayName, dir.getName(), "installed");
+                        info.setId(dir.getName()); // CRIT: Define o ID para remoção
                         results.add(info);
                     }
                 }
@@ -354,6 +396,7 @@ public class ModActions {
                         String suffix = (gameDir != null && gameDir.exists()) ? "" : "  (sem pasta)";
                         displayNames.add("[Perfil] " + p.getName() + suffix);
                         ModInfo info = new ModInfo(p.getName(), p.getName(), "profile");
+                        info.setId(p.getName()); // CRIT: Define o ID para remoção
                         results.add(info);
                     }
                 }
@@ -381,19 +424,7 @@ public class ModActions {
         }).start();
     }
 
-    /**
-     * Resolve o melhor nome "humano" para um diretório de modpack.
-     * Movido para {@link com.minelauncher.utils.ModpackNameResolver} (H-2).
-     */
-    private String resolveModpackDisplayName(File modpackDir) {
-        return com.minelauncher.utils.ModpackNameResolver.resolve(
-                modpackDir, profileManager != null ? profileManager.getProfiles() : null);
-    }
-
     /** Heurística: nomes com formato UUID ou só hex/dígitos com hífens são "lixo" pro display */
-    private static boolean looksLikeGarbage(String s) {
-        return com.minelauncher.utils.ModpackNameResolver.looksLikeGarbage(s);
-    }
 
     public void checkUpdates() {
         String selected = controller.getModList().getSelectionModel().getSelectedItem();

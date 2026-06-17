@@ -1,7 +1,5 @@
 package com.minelauncher.ui.controllers;
 
-import com.minelauncher.auth.MicrosoftAuth;
-import com.minelauncher.auth.OfflineAuth;
 import com.minelauncher.ui.services.AuthService;
 import com.minelauncher.ui.services.BackupService;
 import com.minelauncher.ui.services.VersionInstallationService;
@@ -22,6 +20,7 @@ import com.minelauncher.settings.SettingsManager;
 import java.io.*;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
@@ -107,6 +106,18 @@ public class MainController implements Initializable {
     private ListView<String> versionList;
     @FXML
     private Button installVersionBtn;
+    private ObservableList<String> allVersions;
+
+    // Forge versions tab elements
+    @FXML
+    private VBox forgeSection;
+    @FXML
+    private Text forgeStatusText;
+    @FXML
+    private ListView<String> forgeVersionList;
+    @FXML
+    private Button installForgeBtn;
+    private List<VersionManager.ForgeVersion> currentForgeVersions;
 
     // Mods tab
     @FXML
@@ -228,7 +239,6 @@ public class MainController implements Initializable {
     // QUAL-12: enum LauncherState removido daqui; agora vive em
     // LauncherStateService e é importado estaticamente.
 
-    private long sessionStartMs = System.currentTimeMillis();
     private volatile boolean netOnline = true;
     // NetMonitor é lazy-init (cria ao primeiro checkNetAsync). Encapsula a
     // thread/AtomicBoolean/lógica de ping que antes vivia aqui (H-1, H-9).
@@ -238,14 +248,7 @@ public class MainController implements Initializable {
 
     // Fuso horário fixo do Brasil — não depende do default da JVM
     private static final java.time.ZoneId BRAZIL_ZONE = java.time.ZoneId.of("America/Sao_Paulo");
-    private static final java.time.format.DateTimeFormatter TIME_FMT = java.time.format.DateTimeFormatter
-            .ofPattern("HH:mm:ss");
-    private static final java.time.format.DateTimeFormatter TIME_FMT_FULL = java.time.format.DateTimeFormatter
-            .ofPattern("dd/MM HH:mm:ss");
 
-    private static final java.util.List<String> SESSION_VARIANTS = java.util.List.of(
-            "session-chip-accent", "session-chip-warm", "session-chip-cool", "session-chip-danger",
-            "session-chip-value");
     private static final java.util.List<String> STATUS_VARIANTS = java.util.List.of(
             "status-text", "status-text-accent", "status-text-warm", "status-text-cool", "status-text-danger");
 
@@ -291,7 +294,8 @@ public class MainController implements Initializable {
         debugLog(">>> initialize() entrou");
         
         setupServices();
-        
+        modActions.setController(this);
+
         debugLog(">>> initialize() deps OK");
         setupUI();
         debugLog(">>> initialize() setupUI OK");
@@ -299,6 +303,17 @@ public class MainController implements Initializable {
         loadProfiles();
         loadVersions();
         loadSavedAccount();
+
+        // Listener: quando selecionar versão, carregar versões do Forge
+        versionList.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                String versionId = newVal.split(" \\[")[0];
+                onVersionSelected(versionId);
+            } else {
+                forgeSection.setVisible(false);
+                forgeSection.setManaged(false);
+            }
+        });
         backupPathField.setText(SettingsManager.getInstance().getBackupPath());
         debugLog(">>> initialize() FIM");
     }
@@ -369,8 +384,7 @@ public class MainController implements Initializable {
                     maxRamField.setText(String.valueOf(p.getMaxRam()));
                 }
                 // Resetar contadores de sessão + atualizar header
-                sessionStartMs = System.currentTimeMillis();
-                if (statusBarUpdater != null) statusBarUpdater.updateClock();
+                if (statusBarUpdater != null) statusBarUpdater.resetSessionTime();
                 updateWelcomeHeader();
             }
         });
@@ -530,13 +544,20 @@ public class MainController implements Initializable {
     }
 
     public void loadProfiles() {
-        profileCombo.setItems(FXCollections.observableArrayList());
+        // Coleta todos os nomes primeiro, depois seta de uma vez no ComboBox
+        // para evitar race condition visual do JavaFX (bug onde o combo
+        // mantém o valor antigo quando a lista é populada item a item).
+        ObservableList<String> items = FXCollections.observableArrayList();
         for (LaunchProfile p : profileManager.getProfiles()) {
-            profileCombo.getItems().add(p.getName());
+            items.add(p.getName());
         }
+        profileCombo.setItems(items);
+
         LaunchProfile active = profileManager.getActiveProfile();
-        if (active != null) {
-            profileCombo.setValue(active.getName());
+        if (active != null && items.contains(active.getName())) {
+            profileCombo.getSelectionModel().select(active.getName());
+        } else if (!items.isEmpty()) {
+            profileCombo.getSelectionModel().selectFirst();
         }
         updateWelcomeHeader();
     }
@@ -546,15 +567,37 @@ public class MainController implements Initializable {
             try {
                 var manifest = versionManager.getVersionManifest();
                 Platform.runLater(() -> {
-                    versionList.setItems(FXCollections.observableArrayList());
+                    allVersions = FXCollections.observableArrayList();
                     for (var v : manifest.getVersions()) {
-                        versionList.getItems().add(v.getId() + " [" + v.getType() + "]");
+                        allVersions.add(v.getId() + " [" + v.getType() + "]");
                     }
+                    versionList.setItems(allVersions);
+
+                    // Listener de busca — filtra a lista conforme o usuário digita
+                    versionSearch.textProperty().addListener((obs, oldVal, newVal) -> {
+                        filterVersionList(newVal);
+                    });
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> statusLabel.setText("Erro ao carregar versões: " + e.getMessage()));
             }
         }).start();
+    }
+
+    private void filterVersionList(String query) {
+        if (allVersions == null) return;
+        if (query == null || query.isBlank()) {
+            versionList.setItems(allVersions);
+            return;
+        }
+        String lowerQuery = query.toLowerCase();
+        ObservableList<String> filtered = FXCollections.observableArrayList();
+        for (String v : allVersions) {
+            if (v.toLowerCase().contains(lowerQuery)) {
+                filtered.add(v);
+            }
+        }
+        versionList.setItems(filtered);
     }
 
     private void loadSavedAccount() {
@@ -1185,12 +1228,204 @@ public class MainController implements Initializable {
             return;
         }
 
-        String versionId = selected.split(" \\[")[0]; // Remover [type]
+        String versionId = selected.split(" \\[")[0];
+
+        // Se tiver uma versão do Forge selecionada, instalar Forge + vanilla
+        int forgeIdx = forgeVersionList.getSelectionModel().getSelectedIndex();
+        boolean hasForge = forgeIdx >= 0 && currentForgeVersions != null && forgeIdx < currentForgeVersions.size();
+        if (hasForge) {
+            installForgeVersion();
+            return;
+        }
+
+        setBusy();
+        statusLabel.setText("Instalando " + versionId + "...");
         
         versionInstallationService.installVersion(versionId, 
-            this::loadProfiles, 
-            e -> LOG.error("Erro na instalação", e)
+            () -> {
+                // Criar perfil automaticamente para versão vanilla
+                String profileName = versionId;
+                // Evitar duplicata
+                boolean exists = profileManager.getProfiles().stream()
+                        .anyMatch(p -> p.getName().equals(profileName));
+                if (!exists) {
+                    LaunchProfile profile = new LaunchProfile(profileName, versionId);
+                    profileManager.addProfile(profile);
+                    profileManager.setActiveProfile(profileName);
+                }
+                loadProfiles();
+                statusLabel.setText("Versão " + versionId + " instalada! Perfil criado.");
+                setReady();
+            },
+            e -> {
+                LOG.error("Erro na instalação", e);
+                Platform.runLater(() -> {
+                    statusLabel.setText("Erro: " + e.getMessage());
+                    setReady();
+                });
+            }
         );
+    }
+
+    /**
+     * Quando uma versão é selecionada, carrega as versões do Forge disponíveis.
+     */
+    private void onVersionSelected(String versionId) {
+        // Só buscar Forge para versões vanilla (não pra algo como "1.21.4 [release]")
+        if (!versionId.matches("\\d+(\\.\\d+){1,2}")) {
+            forgeSection.setVisible(false);
+            forgeSection.setManaged(false);
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                List<VersionManager.ForgeVersion> forgeVersions = versionManager.getForgeVersions(versionId);
+                Platform.runLater(() -> {
+                    currentForgeVersions = forgeVersions;
+                    forgeVersionList.getItems().clear();
+                    if (forgeVersions.isEmpty()) {
+                        forgeSection.setVisible(false);
+                        forgeSection.setManaged(false);
+                        return;
+                    }
+                    forgeSection.setVisible(true);
+                    forgeSection.setManaged(true);
+                    for (VersionManager.ForgeVersion fv : forgeVersions) {
+                        String display = fv.forgeVersion;
+                        if (fv.recommended) {
+                            display = "★ " + display + " (recomendada)";
+                        } else if (fv.latest) {
+                            display = "☆ " + display + " (latest)";
+                        }
+                        forgeVersionList.getItems().add(display);
+                    }
+                    forgeStatusText.setText(forgeVersions.size() + " versão(ões) do Forge encontrada(s) para " + versionId);
+                    installForgeBtn.setText("Instalar Vanilla (" + versionId + ")");
+                    installForgeBtn.setDisable(false);
+                });
+            } catch (Exception e) {
+                LOG.warn("Erro ao carregar versões do Forge para {}: {}", versionId, e.getMessage());
+                Platform.runLater(() -> {
+                    forgeSection.setVisible(false);
+                    forgeSection.setManaged(false);
+                });
+            }
+        }).start();
+    }
+
+    /**
+     * Instala apenas a versão vanilla, ignorando qualquer seleção de Forge.
+     * Chamado pelo botão "Instalar Vanilla" na seção de versões do Forge.
+     */
+    @FXML
+    private void installVanillaOnly() {
+        String selected = versionList.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+
+        String mcVersion = selected.split(" \\[")[0];
+
+        setBusy();
+        new Thread(() -> {
+            try {
+                Platform.runLater(() -> statusLabel.setText("Instalando " + mcVersion + " (vanilla)..."));
+                versionInstallationService.installVersion(mcVersion,
+                    () -> {
+                        String profileName = mcVersion;
+                        boolean exists = profileManager.getProfiles().stream()
+                                .anyMatch(p -> p.getName().equals(profileName));
+                        if (!exists) {
+                            LaunchProfile profile = new LaunchProfile(profileName, mcVersion);
+                            profileManager.addProfile(profile);
+                            profileManager.setActiveProfile(profileName);
+                        }
+                        loadProfiles();
+                        Platform.runLater(() -> {
+                            statusLabel.setText("Versão " + mcVersion + " instalada! Perfil criado.");
+                            setReady();
+                        });
+                    },
+                    e -> {
+                        LOG.error("Erro na instalação vanilla", e);
+                        Platform.runLater(() -> {
+                            statusLabel.setText("Erro: " + e.getMessage());
+                            setReady();
+                        });
+                    }
+                );
+            } catch (Exception e) {
+                LOG.error("Erro na instalação", e);
+                Platform.runLater(() -> {
+                    statusLabel.setText("Erro: " + e.getMessage());
+                    setReady();
+                });
+            }
+        }).start();
+    }
+
+    /**
+     * Instala Forge + vanilla (chamado pelo {@link #installVersion()} quando
+     * uma versão do Forge está selecionada na lista de Forge).
+     */
+    private void installForgeVersion() {
+        String selected = versionList.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+
+        String mcVersion = selected.split(" \\[")[0];
+        int forgeIdx = forgeVersionList.getSelectionModel().getSelectedIndex();
+        boolean hasForge = forgeIdx >= 0 && currentForgeVersions != null && forgeIdx < currentForgeVersions.size();
+        if (!hasForge) return;
+
+        setBusy();
+        new Thread(() -> {
+            try {
+                // Instalar Forge
+                VersionManager.ForgeVersion fv = currentForgeVersions.get(forgeIdx);
+                String forgeVer = fv.forgeVersion;
+
+                Platform.runLater(() -> statusLabel.setText("Instalando " + mcVersion + " + Forge " + forgeVer + "..."));
+
+                // 1. Baixar vanilla primeiro
+                versionManager.downloadVersion(mcVersion, (msg, pct) -> 
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Vanilla: " + msg);
+                        if (pct >= 0) progressBar.setProgress(pct * 0.7);
+                    })
+                );
+
+                // 2. Instalar Forge
+                versionManager.installForge(mcVersion, forgeVer, (msg, pct) ->
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Forge: " + msg);
+                        if (pct >= 0) progressBar.setProgress(0.7 + pct * 0.3);
+                    })
+                );
+
+                // 3. Criar perfil
+                Platform.runLater(() -> {
+                    String profileName = mcVersion + " (Forge " + forgeVer + ")";
+                    boolean exists = profileManager.getProfiles().stream()
+                            .anyMatch(p -> p.getName().equals(profileName));
+                    if (!exists) {
+                        LaunchProfile profile = new LaunchProfile(profileName, mcVersion);
+                        profile.setModLoader("forge");
+                        profile.setModLoaderVersion(forgeVer);
+                        profileManager.addProfile(profile);
+                        profileManager.setActiveProfile(profileName);
+                    }
+                    loadProfiles();
+                    statusLabel.setText("Forge " + mcVersion + "-" + forgeVer + " instalado! Perfil criado.");
+                    progressBar.setProgress(1.0);
+                    setReady();
+                });
+            } catch (Exception e) {
+                LOG.error("Erro na instalação", e);
+                Platform.runLater(() -> {
+                    statusLabel.setText("Erro: " + e.getMessage());
+                    setReady();
+                });
+            }
+        }).start();
     }
 
     // ==================== INICIAR JOGO ====================

@@ -1,6 +1,8 @@
 package com.minelauncher.launcher;
 
+import com.minelauncher.models.GameProfile;
 import com.minelauncher.models.LaunchProfile;
+import com.minelauncher.models.VersionDetail;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +12,7 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -178,6 +181,50 @@ class GameLauncherTest {
         placeholders.put("x", "Y");
         String result = invokeReplacePlaceholders("${x}-${x}-${x}", placeholders);
         assertEquals("Y-Y-Y", result);
+    }
+
+    @Test
+    void buildLaunchArgs_updatesForgeIgnoreList() throws Exception {
+        // Mock do VersionDetail com args de Forge
+        VersionDetail detail = new VersionDetail();
+        detail.setMainClass("cpw.mods.bootstraplauncher.BootstrapLauncher");
+        // Precisamos setar o ID para o teste
+        java.lang.reflect.Field idField = VersionDetail.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(detail, "1.20.1-forge-47.4.10");
+
+        VersionDetail.Arguments argsObj = new VersionDetail.Arguments();
+        argsObj.setJvm(java.util.Arrays.asList("-DignoreList=bootstraplauncher,forge-", "-DsomeOther=value"));
+        detail.setArguments(argsObj);
+        detail.setLibraries(java.util.Collections.emptyList());
+
+        LaunchProfile profile = new LaunchProfile("test", "1.20.1");
+        profile.setMaxRam(2048);
+        profile.setMinRam(512);
+
+        GameProfile account = new GameProfile("Player", java.util.UUID.randomUUID(), false);
+        account.setAccessToken("token123");
+
+        Method m = GameLauncher.class.getDeclaredMethod("buildLaunchArgs",
+                VersionDetail.class, LaunchProfile.class, GameProfile.class,
+                String.class, String.class, File.class);
+        m.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        List<String> result = (List<String>) m.invoke(launcher,
+                detail, profile, account, "cp1:cp2", "/usr/bin/java", tempDir);
+
+        // Verifica se o ignoreList foi atualizado corretamente
+        boolean foundUpdatedIgnoreList = false;
+        for (String arg : result) {
+            if (arg.startsWith("-DignoreList=")) {
+                foundUpdatedIgnoreList = true;
+                assertTrue(arg.contains("1.20.1-forge-47.4.10"), "Deve conter o ID da versão: " + arg);
+                assertTrue(arg.contains("_1."), "Deve conter o prefixo de módulo automático: " + arg);
+                assertTrue(arg.contains("bootstraplauncher"), "Deve manter os originais: " + arg);
+            }
+        }
+        assertTrue(foundUpdatedIgnoreList, "Argumento -DignoreList não encontrado no comando gerado");
     }
 
     private String invokeReplacePlaceholders(String input, Map<String, String> placeholders)

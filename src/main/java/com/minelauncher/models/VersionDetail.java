@@ -34,6 +34,7 @@ public class VersionDetail {
     public String getAssets() { return assets; }
     public void setAssets(String a) { this.assets = a; }
     public JavaVersion getJavaVersion() { return javaVersion; }
+    public void setJavaVersion(JavaVersion jv) { this.javaVersion = jv; }
 
     /**
      * Representa um argumento condicional do JSON da versão.

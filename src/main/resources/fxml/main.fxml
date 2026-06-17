@@ -385,6 +385,21 @@
                         </Button>
                     </HBox>
                     <ListView fx:id="versionList" styleClass="content-list" VBox.vgrow="ALWAYS"/>
+
+                    <!-- FORGE VERSIONS -->
+                    <VBox spacing="6" visible="false" managed="false" fx:id="forgeSection">
+                        <Label text="Versões do Forge:" styleClass="section-label"/>
+                        <Text fx:id="forgeStatusText" styleClass="info-text"/>
+                        <ListView fx:id="forgeVersionList" styleClass="content-list" prefHeight="120"/>
+                        <Button fx:id="installForgeBtn" styleClass="btn-primary" onAction="#installVanillaOnly"
+                                focusTraversable="false" disable="true">
+                            <graphic>
+                                <SVGPath content="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"
+                                         fill="TRANSPARENT" stroke="#0a0e1a" strokeWidth="1.8"/>
+                            </graphic>
+                            <text>Instalar Vanilla</text>
+                        </Button>
+                    </VBox>
                 </VBox>
 
                 <!-- MODS -->

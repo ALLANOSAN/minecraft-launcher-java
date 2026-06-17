@@ -52,7 +52,7 @@ public class LibraryVerifier {
             if (lib.getDownloads() == null || lib.getDownloads().getArtifact() == null) continue;
 
             VersionDetail.DownloadFile artifact = lib.getDownloads().getArtifact();
-            File libFile = new File(baseDir, "libraries/" + artifact.getPath());
+            File libFile = new File(baseDir, "libraries/" + VersionManager.resolveLibraryPath(artifact));
             if (libFile.exists()) {
                 classpath.append(libFile.getAbsolutePath()).append(File.pathSeparator);
             }
@@ -70,7 +70,7 @@ public class LibraryVerifier {
      * Verifica e baixa libraries que estão faltando localmente.
      *
      * <p>CRIT-5 do code-review: a versão anterior chamava
-     * {@code calculateSHA1()} em cada library em TODO launch, gerando
+     * {@code calculateSHA1()} em cada library em todo launch, gerando
      * um custo de 1-5s por login (proporcional à quantidade de libs).
      * Agora usamos um sidecar marker {@code <lib>.sha1.ok} criado pelo
      * {@link DownloadManager} quando um download com SHA1 esperado
@@ -91,7 +91,7 @@ public class LibraryVerifier {
             if (lib.getDownloads() == null || lib.getDownloads().getArtifact() == null) continue;
 
             VersionDetail.DownloadFile artifact = lib.getDownloads().getArtifact();
-            File libFile = new File(baseDir, "libraries/" + artifact.getPath());
+            File libFile = new File(baseDir, "libraries/" + VersionManager.resolveLibraryPath(artifact));
 
             boolean needsDownload = !libFile.exists();
 

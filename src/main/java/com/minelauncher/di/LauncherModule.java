@@ -16,10 +16,12 @@ public class LauncherModule extends AbstractModule {
         bind(SettingsManager.class).toInstance(SettingsManager.getInstance());
         
         // Services/Managers needed for injection
-        bind(ProfileManager.class).toProvider(() -> new ProfileManager(SettingsManager.getInstance().getBaseDir()));
-        bind(VersionManager.class).toProvider(() -> new VersionManager(SettingsManager.getInstance().getBaseDir()));
-        bind(GameLauncher.class).toProvider(() -> new GameLauncher(SettingsManager.getInstance().getBaseDir(), new VersionManager(SettingsManager.getInstance().getBaseDir())));
-        bind(ModManager.class).toProvider(() -> new ModManager(SettingsManager.getInstance().getBaseDir()));
+        bind(VersionManager.class).toInstance(new VersionManager(SettingsManager.getInstance().getBaseDir()));
+        bind(ProfileManager.class).toInstance(new ProfileManager(SettingsManager.getInstance().getBaseDir()));
+        bind(ModManager.class).toInstance(new ModManager(SettingsManager.getInstance().getBaseDir()));
+        bind(GameLauncher.class).toInstance(new GameLauncher(SettingsManager.getInstance().getBaseDir(), 
+                new VersionManager(SettingsManager.getInstance().getBaseDir())));
+        
         bind(BackupService.class).in(Singleton.class);
         bind(DiscordService.class).in(Singleton.class);
         bind(UpdateService.class).in(Singleton.class);

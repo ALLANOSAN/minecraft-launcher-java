@@ -84,20 +84,22 @@ public class ModManager {
         String encodedQuery = java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8);
         String url = getModrinthApiUrl() + "/search?query=" + encodedQuery +
                 "&limit=" + limit;
-        JsonArray inner = new JsonArray();
+        // HIGH-13: constrói facets como JSON de strings "campo:valor",
+        // cada condição em seu próprio array interno (AND entre elas).
+        // Antes enviava objetos JSON {campo:valor} que a API Modrinth
+        // rejeita com "invalid type: map, expected a string".
+        JsonArray outer = new JsonArray();
         if (gameVersion != null && !gameVersion.isEmpty()) {
-            JsonObject f = new JsonObject();
-            f.addProperty("versions", gameVersion);
-            inner.add(f);
+            JsonArray vf = new JsonArray();
+            vf.add("versions:" + gameVersion);
+            outer.add(vf);
         }
         if (projectType != null && !projectType.isEmpty()) {
-            JsonObject f = new JsonObject();
-            f.addProperty("project_type", projectType);
-            inner.add(f);
+            JsonArray pf = new JsonArray();
+            pf.add("project_type:" + projectType);
+            outer.add(pf);
         }
-        if (inner.size() > 0) {
-            JsonArray outer = new JsonArray();
-            outer.add(inner);
+        if (outer.size() > 0) {
             String facetsJson = com.minelauncher.utils.JsonUtils.GSON.toJson(outer);
             url += "&facets=" + java.net.URLEncoder.encode(facetsJson, java.nio.charset.StandardCharsets.UTF_8);
         }

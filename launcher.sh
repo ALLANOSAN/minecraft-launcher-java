@@ -17,20 +17,6 @@ if [ -n "$JAVA_HOME" ] && [ -x "$JAVA_HOME/bin/java" ]; then
     JAVA_BIN="$JAVA_HOME/bin/java"
 fi
 
-# Argumentos base para o JavaFX no JAR (Shade)
-# Usamos o wrapper Main para evitar problemas de modulos
-exec "$JAVA_BIN" \
-    -Xmx2G \
-    --add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED \
-    --add-opens javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-    --add-opens javafx.graphics/com.sun.javafx.stage=ALL-UNNAMED \
-    --add-opens javafx.graphics/com.sun.javafx.tk=ALL-UNNAMED \
-    --add-opens javafx.graphics/com.sun.javafx.scene=ALL-UNNAMED \
-    --add-opens javafx.graphics/com.sun.javafx.util=ALL-UNNAMED \
-    --add-opens javafx.base/com.sun.javafx.binding=ALL-UNNAMED \
-    --add-opens javafx.base/com.sun.javafx.event=ALL-UNNAMED \
-    --add-opens javafx.base/com.sun.javafx.collections=ALL-UNNAMED \
-    --add-opens javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED \
-    --add-opens javafx.controls/com.sun.javafx.scene.control.skin=ALL-UNNAMED \
-    --add-opens javafx.fxml/com.sun.javafx.fxml=ALL-UNNAMED \
-    -jar "$JAR_PATH" "$@"
+# JavaFX e dependências estão empacotados no fat JAR (shade),
+# então --add-opens para módulos do JavaFX não são necessários
+exec "$JAVA_BIN" -Xmx2G -jar "$JAR_PATH" "$@"

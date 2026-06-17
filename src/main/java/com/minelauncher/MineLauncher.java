@@ -10,8 +10,6 @@ import com.minelauncher.ui.services.UpdateService;
 import com.minelauncher.utils.ShortcutManager;
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.scene.control.Alert;
-import javafx.scene.control.ButtonType;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;

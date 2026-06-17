@@ -33,7 +33,7 @@ public class StatusBarUpdater {
     private final Runnable initialNetCheck;
     private final ProfileManager profileManager;
 
-    private final long sessionStartMs = System.currentTimeMillis();
+    private long sessionStartMs = System.currentTimeMillis();
     private AnimationTimer timer;
     private long lastRamUpdateNs = 0;
     private long lastNetUpdateNs = 0;
@@ -115,6 +115,11 @@ public class StatusBarUpdater {
     public void updateNetLabel(boolean online) {
         if (statusNetLabel == null) return;
         statusNetLabel.setText(online ? "ONLINE" : "OFFLINE");
+    }
+
+    public void resetSessionTime() {
+        this.sessionStartMs = System.currentTimeMillis();
+        updateClock();
     }
 
     private static String formatElapsedCompact(long ms) {

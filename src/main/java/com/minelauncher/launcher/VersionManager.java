@@ -17,6 +17,10 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.DocumentBuilder;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
 
 public class VersionManager {
 
@@ -128,6 +132,7 @@ public class VersionManager {
                 if (detail.getAssetIndex() == null) detail.setAssetIndex(parent.getAssetIndex());
                 if (detail.getAssets() == null) detail.setAssets(parent.getAssets());
                 if (detail.getDownloads() == null) detail.setDownloads(parent.getDownloads());
+                if (detail.getJavaVersion() == null) detail.setJavaVersion(parent.getJavaVersion());
 
                 // Merge arguments: JVM args do pai (Xmx, library.path, etc.) + args do filho (NeoForge)
                 // Regra: filho define seus args primeiro; pai complementa com args que o filho não tem
@@ -307,7 +312,7 @@ public class VersionManager {
         // BUG-7: monta a lista de tarefas e delega ao helper downloadParallel.
         List<Runnable> libTasks = new ArrayList<>(total);
         for (VersionDetail.DownloadFile artifact : toDownload) {
-            File dest = new File(baseDir, "libraries/" + artifact.getPath());
+            File dest = new File(baseDir, "libraries/" + resolveLibraryPath(artifact));
             libTasks.add(() -> {
                 try {
                     downloader.download(artifact.getUrl(), dest, artifact.getSha1(), null);
@@ -418,7 +423,7 @@ public class VersionManager {
      */
     public void installForge(String mcVersion, String forgeVersion,
                              BiConsumer<String, Double> progress) throws IOException {
-        String fullVersion = mcVersion + "-forge-" + forgeVersion;
+        String fullVersion = mcVersion + "-" + forgeVersion;
         LOG.info("Instalando Forge {}", fullVersion);
 
         // Baixar instalador do Forge
@@ -612,7 +617,125 @@ public class VersionManager {
         return installed;
     }
 
+    /**
+     * Resolve o caminho relativo de uma library dentro de libraries/.
+     * O JSON da Mojang pode não incluir {@code path} no artifact,
+     * então extraímos o path da URL quando necessário.
+     */
+    public static String resolveLibraryPath(VersionDetail.DownloadFile artifact) {
+        if (artifact.getPath() != null) return artifact.getPath();
+
+        // Ex: "https://libraries.minecraft.net/com/mojang/patchy/2.2.10/patchy-2.2.10.jar"
+        // → "com/mojang/patchy/2.2.10/patchy-2.2.10.jar"
+        String url = artifact.getUrl();
+        if (url != null) {
+            try {
+                java.net.URI uri = new java.net.URI(url);
+                String path = uri.getPath();
+                if (path != null && !path.isEmpty()) {
+                    return path.startsWith("/") ? path.substring(1) : path;
+                }
+            } catch (Exception e) {
+                LOG.debug("Não foi possível extrair path da URL: {}", url);
+            }
+        }
+        // Fallback seguro: usa SHA1 como nome único para evitar colisão
+        String sha = artifact.getSha1();
+        if (sha != null) return "libs/" + sha.substring(0, Math.min(12, sha.length())) + ".jar";
+        return "libs/unknown-" + System.nanoTime() + ".jar";
+    }
+
     private String getOSKey() {
         return PlatformUtil.getOSKey();
+    }
+
+    // ==================== FORGE VERSIONS ====================
+
+    /**
+     * Representa uma versão do Forge disponível para uma versão do Minecraft.
+     * recommended = true quando a promoção "recommended" do Forge aponta para ela.
+     * latest = true quando a promoção "latest" aponta para ela.
+     */
+    public static class ForgeVersion {
+        public String forgeVersion;
+        public boolean recommended;
+        public boolean latest;
+
+        public ForgeVersion(String forgeVersion, boolean recommended, boolean latest) {
+            this.forgeVersion = forgeVersion;
+            this.recommended = recommended;
+            this.latest = latest;
+        }
+    }
+
+    /**
+     * Busca todas as versões do Forge disponíveis para uma versão do Minecraft,
+     * marcando qual é a "recommended" (★) e "latest".
+     *
+     * Fontes: maven-metadata.xml (lista todas) + promotions_slim.json (recommended/latest).
+     */
+    public List<ForgeVersion> getForgeVersions(String mcVersion) throws IOException {
+        // 1. Fetch promotions_slim.json para saber recommended/latest
+        Set<String> recommended = new HashSet<>();
+        Set<String> latest = new HashSet<>();
+        try {
+            Request req = new Request.Builder()
+                    .url("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")
+                    .build();
+            try (Response resp = HttpClient.getInstance().newCall(req).execute()) {
+                if (resp.isSuccessful() && resp.body() != null) {
+                    String json = resp.body().string();
+                    JsonObject promos = JsonParser.parseString(json)
+                            .getAsJsonObject().getAsJsonObject("promos");
+                    if (promos != null) {
+                        // "1.20.1-recommended" => "47.2.0"
+                        String recKey = mcVersion + "-recommended";
+                        String latKey = mcVersion + "-latest";
+                        if (promos.has(recKey)) recommended.add(promos.get(recKey).getAsString());
+                        if (promos.has(latKey)) latest.add(promos.get(latKey).getAsString());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Não foi possível carregar promos do Forge: {}", e.getMessage());
+        }
+
+        // 2. Fetch maven-metadata.xml para listar TODAS as versões
+        List<ForgeVersion> versions = new ArrayList<>();
+        try {
+            Request req = new Request.Builder()
+                    .url("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml")
+                    .build();
+            try (Response resp = HttpClient.getInstance().newCall(req).execute()) {
+                if (resp.isSuccessful() && resp.body() != null) {
+                    byte[] xmlBytes = resp.body().bytes();
+                    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                    DocumentBuilder builder = factory.newDocumentBuilder();
+                    Document doc = builder.parse(new ByteArrayInputStream(xmlBytes));
+                    NodeList versionNodes = doc.getElementsByTagName("version");
+                    String prefix = mcVersion + "-";
+                    for (int i = 0; i < versionNodes.getLength(); i++) {
+                        String fullVersion = versionNodes.item(i).getTextContent().trim();
+                        if (fullVersion.startsWith(prefix)) {
+                            String forgeVer = fullVersion.substring(prefix.length());
+                            boolean isRec = recommended.contains(forgeVer);
+                            boolean isLat = latest.contains(forgeVer);
+                            versions.add(new ForgeVersion(forgeVer, isRec, isLat));
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Não foi possível carregar maven-metadata do Forge: {}", e.getMessage());
+        }
+
+        // Ordenar: recommended primeiro, depois latest, depois ordem reversa
+        versions.sort((a, b) -> {
+            if (a.recommended != b.recommended) return a.recommended ? -1 : 1;
+            if (a.latest != b.latest) return a.latest ? -1 : 1;
+            return b.forgeVersion.compareTo(a.forgeVersion); // mais recente primeiro
+        });
+
+        return versions;
     }
 }

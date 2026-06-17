@@ -224,6 +224,17 @@ public class GameLauncher {
                 if (skipNext) { skipNext = false; continue; }
                 if (raw.equals("-cp") || raw.equals("--class-path")) { skipNext = true; continue; }
                 if (raw.startsWith("-Xmx") || raw.startsWith("-Xms") || raw.startsWith("-XX:")) continue;
+                // Forge module fix: o modulo automatico derivado do JAR
+                // "1.20.1-forge-47.4.10.jar" tem nome tipo "_1._20._1.forge"
+                // (Java prefixa com _ quando o nome começa com digito).
+                // A "-DignoreList" original tem "forge-" que só casa com
+                // nomes contendo "forge-" (com traço). Modulos Java usam
+                // ponto/underline, então "forge-" nunca casa. Adicionamos
+                // o ID da versão (que casa com o filename) e "_1." (que
+                // casa com o prefixo do modulo derivado).
+                if (raw.startsWith("-DignoreList=")) {
+                    raw = raw.replace("-DignoreList=", "-DignoreList=" + detail.getId() + ",_1.,");
+                }
                 args.add(replacePlaceholders(raw, placeholders));
             }
 
