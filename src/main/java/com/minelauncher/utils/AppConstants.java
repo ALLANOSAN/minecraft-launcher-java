@@ -23,7 +23,7 @@ public final class AppConstants {
     public static final double WINDOW_MIN_HEIGHT = 680.0;
 
     // ===== Versão =====
-    public static final String APP_VERSION = "1.1.4";
+    public static final String APP_VERSION = "1.1.5";
 
     // ===== Título =====
     public static final String APP_TITLE = "MineLauncher v" + APP_VERSION;

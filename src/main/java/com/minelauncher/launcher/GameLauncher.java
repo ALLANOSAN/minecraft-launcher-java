@@ -298,7 +298,7 @@ public class GameLauncher {
         map.put("auth_xuid", "");
         map.put("natives_directory", nativesDir);
         map.put("launcher_name", "MineLauncher");
-        map.put("launcher_version", "1.0.0");
+        map.put("launcher_version", com.minelauncher.utils.AppConstants.APP_VERSION);
         map.put("library_directory", new File(baseDir, "libraries").getAbsolutePath());
         map.put("classpath_separator", File.pathSeparator);
         map.put("version", profile.getGameVersion());
