@@ -590,6 +590,11 @@
                                 </graphic>
                                 <text>Carregar do arquivo...</text>
                             </Button>
+
+                            <Button styleClass="btn-primary" onAction="#downloadCurrentSkin"
+                                    maxWidth="Infinity" focusTraversable="false">
+                                <text>Download Skin</text>
+                            </Button>
                         </VBox>
                     </HBox>
                 </VBox>
