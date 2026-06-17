@@ -33,8 +33,6 @@ import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.animation.ScaleTransition;
 import javafx.util.Duration;
-import javax.imageio.ImageIO;
-import javafx.embed.swing.SwingFXUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -888,12 +886,10 @@ public class MainController implements Initializable {
         java.io.File file = chooser.showSaveDialog(stage);
         if (file == null) return;
 
-        try {
-            ImageIO.write(SwingFXUtils.fromFXImage(currentSkinData.getImage(), null), "png", file);
+        if (skinManager.exportSkin(currentSkinData, file.toPath())) {
             statusLabel.setText("Skin salva em: " + file.getName());
-        } catch (java.io.IOException e) {
-            LOG.error("Erro ao salvar skin", e);
-            statusLabel.setText("Erro ao salvar skin: " + e.getMessage());
+        } else {
+            statusLabel.setText("Erro ao salvar skin.");
         }
     }
 
