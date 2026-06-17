@@ -20,21 +20,24 @@ public class SkinData {
     private final String textureUrl;  // URL da imagem PNG
     private final Image image;        // imagem já baixada
     private final String localPath;   // caminho local se LOCAL_FILE
+    private final String uuid;        // UUID para render 3D
 
-    public SkinData(Source source, String ownerName, String textureUrl, Image image) {
+    public SkinData(Source source, String ownerName, String textureUrl, Image image, String uuid) {
         this.source = source;
         this.ownerName = ownerName;
         this.textureUrl = textureUrl;
         this.image = image;
         this.localPath = null;
+        this.uuid = uuid;
     }
 
-    public SkinData(Source source, String textureUrl, Image image, String localPath) {
+    public SkinData(Source source, String textureUrl, Image image, String localPath, String uuid) {
         this.source = source;
         this.ownerName = null;
         this.textureUrl = textureUrl;
         this.image = image;
         this.localPath = localPath;
+        this.uuid = uuid;
     }
 
     public Source getSource() { return source; }
@@ -42,6 +45,7 @@ public class SkinData {
     public String getTextureUrl() { return textureUrl; }
     public Image getImage() { return image; }
     public String getLocalPath() { return localPath; }
+    public String getUuid() { return uuid; }
 
     public String getDisplayLabel() {
         return switch (source) {

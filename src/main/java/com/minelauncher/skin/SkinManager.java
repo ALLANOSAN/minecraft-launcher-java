@@ -135,7 +135,7 @@ public class SkinManager {
                                     .get("url").getAsString();
                             Image img = downloadImage(skinUrl);
                             if (img != null) {
-                                SkinData data = new SkinData(SkinData.Source.MOJANG, name, skinUrl, img);
+                                SkinData data = new SkinData(SkinData.Source.MOJANG, name, skinUrl, img, uuidNoDash);
                                 saveToCache(uuid, data);
                                 return data;
                             }
@@ -178,7 +178,7 @@ public class SkinManager {
                 // Preferir textura do NameMC (geralmente 64x64 com overlay)
                 Image img = downloadImage(skinUrl);
                 if (img != null) {
-                    return new SkinData(SkinData.Source.NAMEMC, username, skinUrl, img);
+                    return new SkinData(SkinData.Source.NAMEMC, username, skinUrl, img, uuidHex);
                 }
             } catch (Exception e) {
                 LOG.warn("NameMC lookup falhou para '{}': {}", username, e.getMessage());
@@ -195,7 +195,7 @@ public class SkinManager {
             try {
                 Image img = downloadImage(imageUrl);
                 if (img != null) {
-                    return new SkinData(SkinData.Source.URL, imageUrl, img, null);
+                    return new SkinData(SkinData.Source.URL, imageUrl, img, null, null);
                 }
             } catch (Exception e) {
                 LOG.error("Erro ao carregar skin de URL '{}'", imageUrl, e);
@@ -214,7 +214,7 @@ public class SkinManager {
                 try (InputStream is = Files.newInputStream(filePath)) {
                     Image img = new Image(is);
                     if (!img.isError()) {
-                        return new SkinData(SkinData.Source.LOCAL_FILE, null, img, filePath.toString());
+                        return new SkinData(SkinData.Source.LOCAL_FILE, null, img, filePath.toString(), null);
                     }
                 }
             } catch (Exception e) {
@@ -340,7 +340,7 @@ public class SkinManager {
                 try (InputStream is = Files.newInputStream(imgFile)) {
                     Image img = new Image(is);
                     if (!img.isError()) {
-                        return new SkinData(SkinData.Source.MOJANG, name, url, img);
+                        return new SkinData(SkinData.Source.MOJANG, name, url, img, uuid.toString());
                     }
                 }
             }
@@ -401,7 +401,7 @@ public class SkinManager {
                     String uuid = data.get("uuid").getAsString();
                     
                     Image img = downloadImage(skinUrl);
-                    return new SkinData(SkinData.Source.UPLOAD, "Mineskin", skinUrl, img);
+                    return new SkinData(SkinData.Source.UPLOAD, "Mineskin", skinUrl, img, uuid);
                 }
                 LOG.warn("MineSkin upload falhou: HTTP {}", resp.statusCode());
             } catch (Exception e) {

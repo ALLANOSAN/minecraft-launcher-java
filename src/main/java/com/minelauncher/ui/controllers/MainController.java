@@ -906,7 +906,11 @@ public class MainController implements Initializable {
             initSkinPreview();
         }
         if (skinPreview3D != null) {
-            skinPreview3D.updateSkin(skin.getImage());
+            if (skin.getUuid() != null) {
+                skinPreview3D.render3D(skin.getUuid());
+            } else {
+                skinPreview3D.updateSkin(skin.getImage());
+            }
         }
         skinInfoLabel.setText(skin.getDisplayLabel());
         // Se veio de busca por nome ou URL, limpa o campo
