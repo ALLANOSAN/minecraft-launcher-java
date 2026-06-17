@@ -3,7 +3,6 @@ package com.minelauncher.skin;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.minelauncher.launcher.HttpClient;
 import com.minelauncher.utils.JsonUtils;
 import javafx.scene.image.Image;
 import org.slf4j.Logger;
@@ -367,10 +366,50 @@ public class SkinManager {
         }
     }
 
+    private static final String MINESKIN_API_URL = "https://api.mineskin.org/generate/upload";
+
     /**
-     * Exporta uma SkinData para um arquivo PNG no caminho especificado.
-     * @return true se salvou com sucesso
+     * Faz upload de uma imagem local para a MineSkin v2 API.
      */
+    public CompletableFuture<SkinData> uploadToMineSkin(Path imagePath) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String boundary = "Boundary" + System.currentTimeMillis();
+                byte[] fileBytes = Files.readAllBytes(imagePath);
+                
+                String body = "--" + boundary + "\r\n" +
+                              "Content-Disposition: form-data; name=\"file\"; filename=\"" + imagePath.getFileName() + "\"\r\n" +
+                              "Content-Type: image/png\r\n\r\n";
+                
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                baos.write(body.getBytes(StandardCharsets.UTF_8));
+                baos.write(fileBytes);
+                baos.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(MINESKIN_API_URL))
+                        .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(baos.toByteArray()))
+                        .build();
+
+                HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() == 200) {
+                    JsonObject json = JsonParser.parseString(resp.body()).getAsJsonObject();
+                    JsonObject data = json.getAsJsonObject("data");
+                    JsonObject texture = data.getAsJsonObject("texture");
+                    String skinUrl = texture.get("url").getAsString();
+                    String uuid = data.get("uuid").getAsString();
+                    
+                    Image img = downloadImage(skinUrl);
+                    return new SkinData(SkinData.Source.UPLOAD, "Mineskin", skinUrl, img);
+                }
+                LOG.warn("MineSkin upload falhou: HTTP {}", resp.statusCode());
+            } catch (Exception e) {
+                LOG.error("Falha no upload para MineSkin", e);
+            }
+            return null;
+        });
+    }
     public boolean exportSkin(SkinData skin, Path targetPath) {
         if (skin == null || skin.getImage() == null) return false;
         try {
@@ -471,8 +510,6 @@ public class SkinManager {
         int pants = 0xFF204060;  // azul escuro
         int shirt = 0xFF4090C0;  // azul claro
         int eye  = 0xFF202020;
-        int hair = 0xFF603020;
-        int white = 0xFFFFFFFF;
 
         // Cabeça: pixels 8-16 em x, 8-16 em y
         for (int y = 0; y < 64; y++) {
