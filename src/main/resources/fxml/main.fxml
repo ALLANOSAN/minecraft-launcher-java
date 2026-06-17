@@ -545,8 +545,8 @@
 
                     <HBox spacing="20" VBox.vgrow="ALWAYS">
                         <!-- Preview 3D -->
-                        <StackPane fx:id="skinPreviewHolder" styleClass="skin-preview-box"
-                                   prefWidth="360" prefHeight="400" HBox.hgrow="NEVER"/>
+                        <WebView fx:id="skinWebView" styleClass="skin-preview-box"
+                                 prefWidth="360" prefHeight="400" HBox.hgrow="NEVER"/>
 
                         <!-- Controls -->
                         <VBox spacing="14" HBox.hgrow="ALWAYS" maxWidth="360">

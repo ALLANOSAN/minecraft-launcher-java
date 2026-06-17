@@ -19,7 +19,8 @@ import com.minelauncher.profiles.ProfileManager;
 import com.minelauncher.settings.SettingsManager;
 import com.minelauncher.skin.SkinData;
 import com.minelauncher.skin.SkinManager;
-import com.minelauncher.skin.SkinPreview3D;
+import javafx.scene.web.WebView;
+import javafx.scene.web.WebEngine;
 import java.io.*;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -249,7 +250,8 @@ public class MainController implements Initializable {
     @com.google.inject.Inject
     private SkinManager skinManager;
 
-    private SkinPreview3D skinPreview3D;
+    @FXML
+    private WebView skinWebView;
     private SkinData currentSkinData;
 
     // Lista de resultados da última busca
@@ -800,17 +802,6 @@ public class MainController implements Initializable {
     private void showSkins() {
         showTab("skins");
         statusLabel.setText("Aparência — Skin Preview");
-        if (skinPreview3D == null) {
-            initSkinPreview();
-        }
-    }
-
-    private void initSkinPreview() {
-        if (skinPreviewHolder == null) return;
-        Image defaultSkin = skinManager.getDefaultSkin();
-        skinPreview3D = new SkinPreview3D(defaultSkin, 340, 380);
-        skinPreviewHolder.getChildren().setAll(skinPreview3D.getSubScene());
-        skinInfoLabel.setText("Skin padrão (Steve) carregada");
     }
 
     @FXML
@@ -902,23 +893,62 @@ public class MainController implements Initializable {
     private void applySkin(SkinData skin) {
         if (skin == null || skin.getImage() == null) return;
         currentSkinData = skin;
-        if (skinPreview3D == null) {
-            initSkinPreview();
+        
+        String skinUrl = skin.getTextureUrl();
+        // Fallback: se não tiver URL, tenta usar o Crafatar com o UUID
+        if (skinUrl == null && skin.getUuid() != null) {
+             skinUrl = "https://crafatar.com/skins/" + skin.getUuid();
         }
-        if (skinPreview3D != null) {
-            if (skin.getUuid() != null) {
-                skinPreview3D.render3D(skin.getUuid());
-            } else {
-                skinPreview3D.updateSkin(skin.getImage());
-            }
+
+        if (skinUrl != null) {
+            loadSkinInWebView(skinUrl, false);
+        } else {
+            statusLabel.setText("Não foi possível renderizar a skin.");
         }
+        
         skinInfoLabel.setText(skin.getDisplayLabel());
-        // Se veio de busca por nome ou URL, limpa o campo
+        
         if (skin.getSource() == SkinData.Source.MOJANG || skin.getSource() == SkinData.Source.NAMEMC) {
             skinNameField.clear();
         } else if (skin.getSource() == SkinData.Source.URL) {
             skinUrlField.clear();
         }
+    }
+
+    private void loadSkinInWebView(String skinUrl, boolean isSlim) {
+        WebEngine engine = skinWebView.getEngine();
+        String html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <style>
+                * { margin:0; padding:0; background:transparent; overflow:hidden; }
+                canvas { display:block; width:100%%; height:100%%; }
+              </style>
+            </head>
+            <body>
+              <canvas id="skin_container"></canvas>
+              <script src="https://unpkg.com/skinview3d@2.2.1/bundles/skinview3d.bundle.js"></script>
+              <script>
+                const viewer = new skinview3d.SkinViewer({
+                  canvas: document.getElementById("skin_container"),
+                  width: 360,
+                  height: 400,
+                  skin: "%s"
+                });
+                viewer.playerObject.skin.slim = %s;
+                viewer.animation = new skinview3d.WalkingAnimation();
+                viewer.animation.speed = 0.8;
+                viewer.autoRotate = true;
+                viewer.autoRotateSpeed = 0.8;
+                viewer.controls.enableRotate = true;
+                viewer.controls.enableZoom = true;
+              </script>
+            </body>
+            </html>
+            """.formatted(skinUrl, isSlim);
+        engine.loadContent(html);
     }
 
     /**
