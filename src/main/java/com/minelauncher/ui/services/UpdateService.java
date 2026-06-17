@@ -18,17 +18,19 @@ public class UpdateService {
 
     private String getCurrentVersion() {
         String version = getClass().getPackage().getImplementationVersion();
-        return (version != null) ? version : "1.1.1"; // Fallback para dev
+        return (version != null) ? version : com.minelauncher.utils.AppConstants.APP_VERSION;
     }
 
     public String checkVersion() {
         String currentVersion = getCurrentVersion();
+        LOG.info("Versão atual detectada: {}", currentVersion);
         try {
             Request request = new Request.Builder().url(VERSION_URL).build();
             try (Response response = HttpClient.getInstance().newCall(request).execute()) {
                 if (!response.isSuccessful()) return null;
                 JsonObject json = JsonParser.parseString(response.body().string()).getAsJsonObject();
                 String remoteVersion = json.get("version").getAsString();
+                LOG.info("Versão remota disponível: {}", remoteVersion);
                 if (!remoteVersion.equals(currentVersion)) {
                     return json.get("downloadUrl").getAsString();
                 }
@@ -42,7 +44,18 @@ public class UpdateService {
     public void downloadAndUpdate(String downloadUrl) {
         LOG.info("Baixando atualização: {}", downloadUrl);
         try {
-            File newJar = new File("minecraft-launcher-new.jar");
+            // Detectar o JAR atual
+            File currentJar;
+            try {
+                currentJar = new File(UpdateService.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            } catch (Exception e) {
+                // Fallback se não conseguir detectar (ex: rodando em IDE)
+                LOG.warn("Não foi possível detectar o caminho do JAR atual, usando fallback");
+                currentJar = new File("minecraft-launcher.jar");
+            }
+
+            File newJar = new File(currentJar.getParentFile(), currentJar.getName() + ".new");
+            
             Request request = new Request.Builder().url(downloadUrl).build();
             try (Response response = HttpClient.getInstance().newCall(request).execute()) {
                 Files.copy(response.body().byteStream(), newJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -50,9 +63,9 @@ public class UpdateService {
 
             // Criar script de swap (multiplataforma)
             if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                createWindowsSwapper();
+                createWindowsSwapper(currentJar, newJar);
             } else {
-                createUnixSwapper();
+                createUnixSwapper(currentJar, newJar);
             }
             
             System.exit(0);
@@ -61,7 +74,7 @@ public class UpdateService {
         }
     }
 
-    private void createUnixSwapper() throws IOException {
+    private void createUnixSwapper(File currentJar, File newJar) throws IOException {
         String javaArgs = "--add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED " +
                          "--add-opens javafx.graphics/com.sun.glass.ui=ALL-UNNAMED " +
                          "--add-opens javafx.graphics/com.sun.javafx.stage=ALL-UNNAMED " +
@@ -75,13 +88,18 @@ public class UpdateService {
                          "--add-opens javafx.controls/com.sun.javafx.scene.control.skin=ALL-UNNAMED " +
                          "--add-opens javafx.fxml/com.sun.javafx.fxml=ALL-UNNAMED";
         
-        String script = "#!/bin/bash\nsleep 2\nmv minecraft-launcher-new.jar minecraft-launcher.jar\njava " + javaArgs + " -jar minecraft-launcher.jar > update_log.txt 2>&1 &";
-        Files.writeString(new File("update_swap.sh").toPath(), script);
-        new ProcessBuilder("chmod", "+x", "update_swap.sh").start();
-        new ProcessBuilder("./update_swap.sh").start();
+        String script = "#!/bin/bash\n" +
+                        "sleep 2\n" +
+                        "mv \"" + newJar.getAbsolutePath() + "\" \"" + currentJar.getAbsolutePath() + "\"\n" +
+                        "java " + javaArgs + " -jar \"" + currentJar.getAbsolutePath() + "\" > update_log.txt 2>&1 &";
+        
+        File scriptFile = new File(currentJar.getParentFile(), "update_swap.sh");
+        Files.writeString(scriptFile.toPath(), script);
+        new ProcessBuilder("chmod", "+x", scriptFile.getAbsolutePath()).start();
+        new ProcessBuilder("./" + scriptFile.getName()).directory(currentJar.getParentFile()).start();
     }
 
-    private void createWindowsSwapper() throws IOException {
+    private void createWindowsSwapper(File currentJar, File newJar) throws IOException {
         String javaArgs = "--add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED " +
                          "--add-opens javafx.graphics/com.sun.glass.ui=ALL-UNNAMED " +
                          "--add-opens javafx.graphics/com.sun.javafx.stage=ALL-UNNAMED " +
@@ -95,8 +113,13 @@ public class UpdateService {
                          "--add-opens javafx.controls/com.sun.javafx.scene.control.skin=ALL-UNNAMED " +
                          "--add-opens javafx.fxml/com.sun.javafx.fxml=ALL-UNNAMED";
 
-        String script = "@echo off\ntimeout /t 2\nmove /y minecraft-launcher-new.jar minecraft-launcher.jar\nstart java " + javaArgs + " -jar minecraft-launcher.jar";
-        Files.writeString(new File("update_swap.bat").toPath(), script);
-        new ProcessBuilder("cmd", "/c", "start", "update_swap.bat").start();
+        String script = "@echo off\n" +
+                        "timeout /t 2 /nobreak > nul\n" +
+                        "move /y \"" + newJar.getAbsolutePath() + "\" \"" + currentJar.getAbsolutePath() + "\"\n" +
+                        "start java " + javaArgs + " -jar \"" + currentJar.getAbsolutePath() + "\"";
+        
+        File scriptFile = new File(currentJar.getParentFile(), "update_swap.bat");
+        Files.writeString(scriptFile.toPath(), script);
+        new ProcessBuilder("cmd", "/c", "start", scriptFile.getName()).directory(currentJar.getParentFile()).start();
     }
 }

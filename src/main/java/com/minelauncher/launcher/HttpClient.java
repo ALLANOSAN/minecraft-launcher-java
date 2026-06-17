@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
 public final class HttpClient {
 
     /** Versão do launcher injetada no User-Agent. Bump aqui a cada release. */
-    public static final String LAUNCHER_VERSION = "1.0.0";
+    public static final String LAUNCHER_VERSION = com.minelauncher.utils.AppConstants.APP_VERSION;
     public static final String USER_AGENT = "MineLauncher/" + LAUNCHER_VERSION;
 
     private static final OkHttpClient INSTANCE = build();

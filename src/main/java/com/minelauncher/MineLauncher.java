@@ -68,7 +68,7 @@ public class MineLauncher extends Application {
             scene.getStylesheets().add(getClass().getResource("/css/dark-theme.css").toExternalForm());
             
             stage.initStyle(StageStyle.TRANSPARENT);
-            stage.setTitle("MineLauncher v1.0.0");
+            stage.setTitle(com.minelauncher.utils.AppConstants.APP_TITLE);
             stage.setScene(scene);
             stage.setMinWidth(920);
             stage.setMinHeight(680);

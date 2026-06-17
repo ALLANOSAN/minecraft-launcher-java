@@ -22,8 +22,11 @@ public final class AppConstants {
     public static final double WINDOW_MIN_WIDTH = 920.0;
     public static final double WINDOW_MIN_HEIGHT = 680.0;
 
+    // ===== Versão =====
+    public static final String APP_VERSION = "1.1.4";
+
     // ===== Título =====
-    public static final String APP_TITLE = "MineLauncher v1.0.0";
+    public static final String APP_TITLE = "MineLauncher v" + APP_VERSION;
 
     // ===== Fuso horário (Brazil) =====
     public static final String DEFAULT_TIMEZONE = "America/Sao_Paulo";
