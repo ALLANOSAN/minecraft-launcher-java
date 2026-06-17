@@ -19,6 +19,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -362,6 +364,98 @@ public class SkinManager {
             }
         } catch (IOException e) {
             LOG.debug("Não foi possível salvar cache de skin: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Exporta uma SkinData para um arquivo PNG no caminho especificado.
+     * @return true se salvou com sucesso
+     */
+    public boolean exportSkin(SkinData skin, Path targetPath) {
+        if (skin == null || skin.getImage() == null) return false;
+        try {
+            Image fxImg = skin.getImage();
+            int w = (int) fxImg.getWidth();
+            int h = (int) fxImg.getHeight();
+            java.awt.image.BufferedImage bi = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    bi.setRGB(x, y, fxImg.getPixelReader().getArgb(x, y));
+                }
+            }
+            javax.imageio.ImageIO.write(bi, "png", targetPath.toFile());
+            LOG.info("Skin exportada para {}", targetPath);
+            return true;
+        } catch (Exception e) {
+            LOG.warn("Falha ao exportar skin: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Lista todas as skins cacheadas no disco.
+     * Lê os metadados (.dat) e verifica se as imagens existem.
+     */
+    public List<CachedSkinEntry> listCachedSkins() {
+        List<CachedSkinEntry> result = new ArrayList<>();
+        java.io.File[] files = CACHE_DIR.toFile().listFiles((d, name) -> name.endsWith(".dat"));
+        if (files == null) return result;
+        for (java.io.File f : files) {
+            String uuid = f.getName().replace(".dat", "");
+            try (java.io.DataInputStream dis = new java.io.DataInputStream(
+                    new java.io.FileInputStream(f))) {
+                String name = dis.readUTF();
+                String url = dis.readUTF();
+                String imgName = dis.readUTF();
+                Path imgFile = CACHE_DIR.resolve(imgName);
+                Image img = null;
+                if (java.nio.file.Files.exists(imgFile)) {
+                    try (var is = java.nio.file.Files.newInputStream(imgFile)) {
+                        img = new Image(is);
+                    }
+                }
+                result.add(new CachedSkinEntry(uuid, name, img, url));
+            } catch (Exception e) {
+                LOG.debug("Cache inválido: {}", f.getName());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Abre a pasta de cache de skins no gerenciador de arquivos do SO.
+     */
+    public void openCacheFolder() {
+        try {
+            java.awt.Desktop.getDesktop().open(CACHE_DIR.toFile());
+        } catch (Exception e) {
+            LOG.warn("Não foi possível abrir pasta de skins: {}", e.getMessage());
+        }
+    }
+
+    public static class CachedSkinEntry {
+        private final String uuid;
+        private final String playerName;
+        private final Image thumbnail;
+        private final String textureUrl;
+
+        public CachedSkinEntry(String uuid, String playerName, Image thumbnail, String textureUrl) {
+            this.uuid = uuid;
+            this.playerName = playerName;
+            this.thumbnail = thumbnail;
+            this.textureUrl = textureUrl;
+        }
+
+        public String getUuid() { return uuid; }
+        public String getPlayerName() { return playerName; }
+        public Image getThumbnail() { return thumbnail; }
+        public String getTextureUrl() { return textureUrl; }
+
+        /**
+         * Retorna uma label amigável para exibir na UI.
+         */
+        public String getDisplayLabel() {
+            return playerName != null ? playerName : uuid.substring(0, 8) + "...";
         }
     }
 
