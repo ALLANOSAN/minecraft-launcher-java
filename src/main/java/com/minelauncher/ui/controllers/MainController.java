@@ -53,6 +53,8 @@ public class MainController implements Initializable {
     @FXML
     private Label titleLabel;
     @FXML
+    private Label versionLabel;
+    @FXML
     private Button minimizeBtn;
     @FXML
     private Button maximizeBtn;
@@ -429,6 +431,9 @@ public class MainController implements Initializable {
 
         // Mostrar home por padrão
         showTab("home");
+
+        // Atualizar versão
+        versionLabel.setText("v" + com.minelauncher.utils.AppConstants.APP_VERSION + " · CORE TERMINAL");
 
         // Status inicial
         statusLabel.setText("Pronto");

@@ -24,7 +24,7 @@
                 </StackPane>
                 <VBox spacing="-2" alignment="CENTER_LEFT">
                     <Label fx:id="titleLabel" text="MINELAUNCHER" styleClass="header-title"/>
-                    <Label text="v1.0.0 · CORE TERMINAL" styleClass="header-tag"/>
+                    <Label fx:id="versionLabel" styleClass="header-tag"/>
                 </VBox>
             </HBox>
 
