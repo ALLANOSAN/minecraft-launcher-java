@@ -17,6 +17,9 @@ import com.minelauncher.models.GameProfile;
 import com.minelauncher.models.LaunchProfile;
 import com.minelauncher.profiles.ProfileManager;
 import com.minelauncher.settings.SettingsManager;
+import com.minelauncher.skin.SkinData;
+import com.minelauncher.skin.SkinManager;
+import com.minelauncher.skin.SkinPreview3D;
 import java.io.*;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -24,6 +27,7 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
 import javafx.scene.layout.*;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
@@ -76,6 +80,8 @@ public class MainController implements Initializable {
     private Button savesBtn;
     @FXML
     private Button screenshotsBtn;
+    @FXML
+    private Button skinsBtn;
     @FXML
     private Button settingsBtn;
 
@@ -155,6 +161,18 @@ public class MainController implements Initializable {
     @FXML
     private ListView<String> screenshotList;
 
+    // Skins / Aparência tab
+    @FXML
+    private VBox skinsPane;
+    @FXML
+    private StackPane skinPreviewHolder;
+    @FXML
+    private Label skinInfoLabel;
+    @FXML
+    private TextField skinNameField;
+    @FXML
+    private TextField skinUrlField;
+
     // Settings tab
     @FXML
     private VBox settingsPane;
@@ -226,6 +244,11 @@ public class MainController implements Initializable {
     private WindowService windowService;
     @com.google.inject.Inject
     private BackupService backupService;
+    @com.google.inject.Inject
+    private SkinManager skinManager;
+
+    private SkinPreview3D skinPreview3D;
+    private SkinData currentSkinData;
 
     // Lista de resultados da última busca
     private List<ModInfo> lastSearchResults = new ArrayList<>();
@@ -303,6 +326,8 @@ public class MainController implements Initializable {
         loadProfiles();
         loadVersions();
         loadSavedAccount();
+        // Auto-carregar skin da conta logada (se UUID disponível)
+        loadAccountSkinAsync();
 
         // Listener: quando selecionar versão, carregar versões do Forge
         versionList.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
@@ -334,12 +359,12 @@ public class MainController implements Initializable {
         Map<String, Pane> panes = Map.of(
             "home", homePane, "versions", versionsPane, "mods", modsPane,
             "resourcePacks", resourcePacksPane, "saves", savesPane,
-            "screenshots", screenshotsPane, "settings", settingsPane
+            "screenshots", screenshotsPane, "skins", skinsPane, "settings", settingsPane
         );
         Map<String, Button> navButtons = Map.of(
             "home", homeBtn, "versions", versionsBtn, "mods", modsBtn,
             "resourcePacks", resourcePacksBtn, "saves", savesBtn,
-            "screenshots", screenshotsBtn, "settings", settingsBtn
+            "screenshots", screenshotsBtn, "skins", skinsBtn, "settings", settingsBtn
         );
         
         this.navigationService.setDependencies(panes, navButtons);
@@ -762,6 +787,123 @@ public class MainController implements Initializable {
         } else {
             screenshotList.getItems().addAll(screenshotsFull);
         }
+    }
+
+    // ── Skin / Aparência ──────────────────────────────────────
+
+    @FXML
+    private void showSkins() {
+        showTab("skins");
+        statusLabel.setText("Aparência — Skin Preview");
+        if (skinPreview3D == null) {
+            initSkinPreview();
+        }
+    }
+
+    private void initSkinPreview() {
+        if (skinPreviewHolder == null) return;
+        Image defaultSkin = skinManager.getDefaultSkin();
+        skinPreview3D = new SkinPreview3D(defaultSkin, 340, 380);
+        skinPreviewHolder.getChildren().setAll(skinPreview3D.getSubScene());
+        skinInfoLabel.setText("Skin padrão (Steve) carregada");
+    }
+
+    @FXML
+    private void searchSkinByName() {
+        String name = skinNameField.getText();
+        if (name == null || name.trim().isEmpty()) return;
+        statusLabel.setText("Buscando skin de " + name + "...");
+        skinManager.fetchByUsername(name.trim()).thenAccept(skin -> {
+            javafx.application.Platform.runLater(() -> {
+                if (skin == null) {
+                    statusLabel.setText("Jogador '" + name + "' não encontrado");
+                    skinInfoLabel.setText("Jogador não encontrado. Verifique o nome.");
+                    return;
+                }
+                applySkin(skin);
+                statusLabel.setText("Skin de " + skin.getOwnerName() + " carregada");
+            });
+        });
+    }
+
+    @FXML
+    private void loadSkinFromURL() {
+        String url = skinUrlField.getText();
+        if (url == null || url.trim().isEmpty()) return;
+        statusLabel.setText("Baixando skin da URL...");
+        skinManager.loadFromURL(url.trim()).thenAccept(skin -> {
+            javafx.application.Platform.runLater(() -> {
+                if (skin == null) {
+                    statusLabel.setText("Falha ao carregar skin da URL");
+                    skinInfoLabel.setText("URL inválida ou imagem não encontrada.");
+                    return;
+                }
+                applySkin(skin);
+                statusLabel.setText("Skin carregada da URL");
+            });
+        });
+    }
+
+    @FXML
+    private void loadSkinFromFile() {
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Selecionar arquivo de skin");
+        chooser.getExtensionFilters().add(
+                new javafx.stage.FileChooser.ExtensionFilter("Imagens PNG", "*.png"));
+        java.io.File file = chooser.showOpenDialog(stage);
+        if (file == null) return;
+        statusLabel.setText("Carregando skin do arquivo...");
+        skinManager.loadFromFile(file.toPath()).thenAccept(skin -> {
+            javafx.application.Platform.runLater(() -> {
+                if (skin == null) {
+                    statusLabel.setText("Falha ao carregar arquivo");
+                    skinInfoLabel.setText("Arquivo inválido ou corrompido.");
+                    return;
+                }
+                applySkin(skin);
+                statusLabel.setText("Skin carregada: " + file.getName());
+            });
+        });
+    }
+
+    /**
+     * Aplica uma SkinData ao preview 3D e atualiza a label de info.
+     */
+    private void applySkin(SkinData skin) {
+        if (skin == null || skin.getImage() == null) return;
+        currentSkinData = skin;
+        if (skinPreview3D == null) {
+            initSkinPreview();
+        }
+        if (skinPreview3D != null) {
+            skinPreview3D.updateSkin(skin.getImage());
+        }
+        skinInfoLabel.setText(skin.getDisplayLabel());
+        // Se veio de busca por nome ou URL, limpa o campo
+        if (skin.getSource() == SkinData.Source.MOJANG || skin.getSource() == SkinData.Source.NAMEMC) {
+            skinNameField.clear();
+        } else if (skin.getSource() == SkinData.Source.URL) {
+            skinUrlField.clear();
+        }
+    }
+
+    /**
+     * Carrega a skin da conta atualmente logada (assíncrono).
+     */
+    private void loadAccountSkinAsync() {
+        GameProfile account = SettingsManager.getInstance().getSelectedAccount();
+        if (account == null || account.getUuid() == null) {
+            LOG.debug("Sem conta logada com UUID — skin não será auto-carregada");
+            return;
+        }
+        skinManager.fetchByUUID(account.getUuid()).thenAccept(skin -> {
+            javafx.application.Platform.runLater(() -> {
+                if (skin != null) {
+                    applySkin(skin);
+                    LOG.info("Skin de {} carregada automaticamente", skin.getOwnerName());
+                }
+            });
+        });
     }
 
     @FXML

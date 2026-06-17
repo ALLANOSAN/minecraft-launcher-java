@@ -203,6 +203,14 @@
                             </graphic>
                             <text>Screenshots</text>
                         </Button>
+                        <Button fx:id="skinsBtn" styleClass="nav-btn" onAction="#showSkins"
+                                maxWidth="Infinity" focusTraversable="false">
+                            <graphic>
+                                <SVGPath content="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M16 7a4 4 0 1 0-8 0 4 4 0 0 0 8 0z M5 3l-2 4h3l-2 4 M15 3l2 4h-3l2 4"
+                                         fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.6"/>
+                            </graphic>
+                            <text>Aparência</text>
+                        </Button>
                         <Button fx:id="settingsBtn" styleClass="nav-btn" onAction="#showSettings"
                                 maxWidth="Infinity" focusTraversable="false">
                             <graphic>
@@ -527,6 +535,63 @@
                         </Button>
                     </HBox>
                     <ListView fx:id="screenshotList" styleClass="content-list" VBox.vgrow="ALWAYS" prefHeight="300"/>
+                </VBox>
+
+                <!-- SKINS / APARÊNCIA -->
+                <VBox fx:id="skinsPane" spacing="18" visible="false" managed="false">
+                    <padding><Insets top="28" bottom="28" left="32" right="32"/></padding>
+                    <Label text="Aparência" styleClass="page-title"/>
+                    <Text text="Visualize e altere a skin do seu personagem em 3D." styleClass="info-text"/>
+
+                    <HBox spacing="20" VBox.vgrow="ALWAYS">
+                        <!-- Preview 3D -->
+                        <StackPane fx:id="skinPreviewHolder" styleClass="skin-preview-box"
+                                   prefWidth="360" prefHeight="400" HBox.hgrow="NEVER"/>
+
+                        <!-- Controls -->
+                        <VBox spacing="14" HBox.hgrow="ALWAYS" maxWidth="360">
+                            <Label text="SKIN ATUAL" styleClass="section-label"/>
+                            <Label fx:id="skinInfoLabel" text="Nenhuma skin carregada" styleClass="info-text"
+                                   wrapText="true"/>
+
+                            <Region styleClass="sidebar-divider"/>
+
+                            <Label text="BUSCAR POR NOME" styleClass="section-label"/>
+                            <Text text="Busca a skin de qualquer jogador Minecraft pela API pública da Mojang."
+                                  styleClass="info-text" wrappingWidth="340"/>
+                            <HBox spacing="8">
+                                <TextField fx:id="skinNameField" promptText="Nome do jogador..."
+                                           styleClass="search-field" HBox.hgrow="ALWAYS"/>
+                                <Button styleClass="btn-primary" onAction="#searchSkinByName"
+                                        focusTraversable="false">
+                                    <graphic>
+                                        <SVGPath content="M21 21l-4.35-4.35 M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z"
+                                                 fill="TRANSPARENT" stroke="#0a0e1a" strokeWidth="1.8"/>
+                                    </graphic>
+                                    <text>Buscar</text>
+                                </Button>
+                            </HBox>
+
+                            <Label text="URL DA SKIN" styleClass="section-label"/>
+                            <HBox spacing="8">
+                                <TextField fx:id="skinUrlField" promptText="https://exemplo.com/skin.png..."
+                                           styleClass="search-field" HBox.hgrow="ALWAYS"/>
+                                <Button styleClass="btn-primary" onAction="#loadSkinFromURL"
+                                        focusTraversable="false">
+                                    <text>Carregar</text>
+                                </Button>
+                            </HBox>
+
+                            <Button styleClass="btn-secondary" onAction="#loadSkinFromFile"
+                                    maxWidth="Infinity" focusTraversable="false">
+                                <graphic>
+                                    <SVGPath content="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"
+                                             fill="TRANSPARENT" stroke="#c0c8d8" strokeWidth="1.7"/>
+                                </graphic>
+                                <text>Carregar do arquivo...</text>
+                            </Button>
+                        </VBox>
+                    </HBox>
                 </VBox>
 
                 <!-- SETTINGS -->

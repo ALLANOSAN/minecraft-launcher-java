@@ -1756,3 +1756,12 @@
     -fx-hgap: 12;
     -fx-vgap: 12;
 }
+
+/* ==================== SKIN PREVIEW 3D ==================== */
+.skin-preview-box {
+    -fx-background-color: #11151E;
+    -fx-background-radius: 12;
+    -fx-border-color: #1A2030;
+    -fx-border-radius: 12;
+    -fx-border-width: 1;
+}

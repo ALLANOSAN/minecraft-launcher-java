@@ -7,6 +7,7 @@ import com.minelauncher.launcher.VersionManager;
 import com.minelauncher.mods.ModManager;
 import com.minelauncher.profiles.ProfileManager;
 import com.minelauncher.settings.SettingsManager;
+import com.minelauncher.skin.SkinManager;
 import com.minelauncher.ui.services.*;
 import com.minelauncher.ui.controllers.ModActions;
 
@@ -32,5 +33,6 @@ public class LauncherModule extends AbstractModule {
         bind(LauncherStateService.class).in(Singleton.class);
         bind(WindowService.class).in(Singleton.class);
         bind(ModActions.class).in(Singleton.class);
+        bind(SkinManager.class).in(Singleton.class);
     }
 }
