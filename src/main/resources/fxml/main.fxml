@@ -5,6 +5,7 @@
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.shape.*?>
 <?import javafx.scene.text.*?>
+<?import javafx.scene.web.*?>
 
 <StackPane xmlns:fx="http://javafx.com/fxml" fx:controller="com.minelauncher.ui.controllers.MainController"
             styleClass="root-pane-transparent" prefWidth="1210" prefHeight="750">
