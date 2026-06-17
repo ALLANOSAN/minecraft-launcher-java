@@ -8,7 +8,7 @@
 
     <groupId>com.minelauncher</groupId>
     <artifactId>minecraft-launcher</artifactId>
-    <version>1.1.4</version>
+    <version>1.1.5</version>
     <packaging>jar</packaging>
 
     <name>MineLauncher</name>
