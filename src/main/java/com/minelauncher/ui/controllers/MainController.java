@@ -914,7 +914,21 @@ public class MainController implements Initializable {
         }
     }
 
+    private String getSkinView3dJs() {
+        try (java.io.InputStream is = getClass().getResourceAsStream("/web/skinview3d.bundle.js")) {
+            if (is != null) return new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            LOG.warn("skinview3d.bundle.js não encontrado no classpath", e);
+        }
+        return null;
+    }
+
     private void loadSkinInWebView(String skinUrl, boolean isSlim) {
+        String js = getSkinView3dJs();
+        String scriptTag = js != null
+            ? "<script>\n" + js + "\n</script>"
+            : "<script src=\"https://unpkg.com/skinview3d@2.2.1/bundles/skinview3d.bundle.js\"></script>";
+
         WebEngine engine = skinWebView.getEngine();
         String html = """
             <!DOCTYPE html>
@@ -922,13 +936,14 @@ public class MainController implements Initializable {
             <head>
               <meta charset="UTF-8">
               <style>
-                * { margin:0; padding:0; background:transparent; overflow:hidden; }
+                * { margin:0; padding:0; }
+                html, body { width:100%%; height:100%%; background:#1a1a2e; overflow:hidden; }
                 canvas { display:block; width:100%%; height:100%%; }
               </style>
             </head>
             <body>
               <canvas id="skin_container"></canvas>
-              <script src="https://unpkg.com/skinview3d@2.2.1/bundles/skinview3d.bundle.js"></script>
+              %s
               <script>
                 const viewer = new skinview3d.SkinViewer({
                   canvas: document.getElementById("skin_container"),
@@ -946,7 +961,7 @@ public class MainController implements Initializable {
               </script>
             </body>
             </html>
-            """.formatted(skinUrl, isSlim);
+            """.formatted(scriptTag, skinUrl, isSlim);
         engine.loadContent(html);
     }
 
