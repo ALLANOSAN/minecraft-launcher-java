@@ -857,16 +857,19 @@ public class MainController implements Initializable {
                 new javafx.stage.FileChooser.ExtensionFilter("Imagens PNG", "*.png"));
         java.io.File file = chooser.showOpenDialog(stage);
         if (file == null) return;
-        statusLabel.setText("Carregando skin do arquivo...");
-        skinManager.loadFromFile(file.toPath()).thenAccept(skin -> {
-            javafx.application.Platform.runLater(() -> {
+        
+        statusLabel.setText("Fazendo upload para MineSkin (aguarde)...");
+        skinInfoLabel.setText("Processando...");
+        
+        skinManager.uploadToMineSkin(file.toPath()).thenAccept(skin -> {
+            Platform.runLater(() -> {
                 if (skin == null) {
-                    statusLabel.setText("Falha ao carregar arquivo");
-                    skinInfoLabel.setText("Arquivo inválido ou corrompido.");
+                    statusLabel.setText("Falha no upload para MineSkin");
+                    skinInfoLabel.setText("Erro ao processar skin.");
                     return;
                 }
                 applySkin(skin);
-                statusLabel.setText("Skin carregada: " + file.getName());
+                statusLabel.setText("Skin processada e carregada: " + file.getName());
             });
         });
     }
